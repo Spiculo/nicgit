@@ -133,23 +133,24 @@ pub async fn set_ref(state: &AppState, project: &Project, number: i32, commit: &
 /// A design option got new versions: open proposals from it follow its head (and approvals given to an
 /// earlier head are dismissed when the target's rule says so); proposals into it note the new target.
 pub async fn on_option_moved(state: &AppState, project: &Project, option: &str, head: &str) -> ApiResult<()> {
-    let moved: Vec<(Uuid, i32, String, String)> = sqlx::query_as(
-        "UPDATE proposals SET source_head = $3, updated_at = now() \
-         WHERE project_id = $1 AND source = $2 AND state = 'open' AND source_head <> $3 RETURNING id, number, target, source_head",
+    // Moving the head and dismissing earlier approvals happen together: a reader never sees a proposal
+    // approved on versions nobody reviewed.
+    let mut tx = state.db.begin().await?;
+    let moved: Vec<(Uuid, i32, String)> = sqlx::query_as(
+        "UPDATE proposals SET source_head = $3, updated_at = now()          WHERE project_id = $1 AND source = $2 AND state = 'open' AND source_head <> $3 RETURNING id, number, target",
     )
     .bind(project.id)
     .bind(option)
     .bind(head)
-    .fetch_all(&state.db)
+    .fetch_all(&mut *tx)
     .await?;
-    for (id, number, target, _) in moved {
-        set_ref(state, project, number, head).await?;
-        let (rule, _) = rule(state, project.id, &target).await?;
-        if rule.dismiss_on_push {
+    for (id, _, target) in &moved {
+        let dismiss = rules::rule_for(&state.db, project.id, target).await?.is_none_or(|r| r.dismiss_on_push);
+        if dismiss {
             sqlx::query("UPDATE reviews SET dismissed = true WHERE proposal_id = $1 AND source_head <> $2 AND NOT dismissed")
                 .bind(id)
                 .bind(head)
-                .execute(&state.db)
+                .execute(&mut *tx)
                 .await?;
         }
     }
@@ -157,7 +158,11 @@ pub async fn on_option_moved(state: &AppState, project: &Project, option: &str, 
         .bind(project.id)
         .bind(option)
         .bind(head)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
+    for (_, number, _) in moved {
+        set_ref(state, project, number, head).await?;
+    }
     Ok(())
 }

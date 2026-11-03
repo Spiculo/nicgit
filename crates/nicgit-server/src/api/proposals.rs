@@ -381,7 +381,20 @@ async fn run_combine(
         .filter(|r| r.verdict == "approve" && !r.dismissed)
         .map(|r| r.user)
         .collect();
-    let mut message = format!("Combine proposal #{}: {}\n\n{} into {}\nProposal: #{}\nMode: {}", prop.number, prop.title, prop.source, prop.target, prop.number, mode.as_str());
+    let label = crate::api::versions::option_label;
+    let mut message = format!(
+        "Combine proposal #{}: {}
+
+{} into {}
+Proposal: #{}
+Mode: {}",
+        prop.number,
+        prop.title,
+        label(&prop.source),
+        label(&prop.target),
+        prop.number,
+        mode.as_str()
+    );
     for a in approvers {
         message.push_str(&format!("\nApproved-by: {a}"));
     }
