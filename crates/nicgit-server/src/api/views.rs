@@ -29,6 +29,19 @@ pub fn router() -> Router<AppState> {
         .route(&format!("{base}/versions/{{rev}}/checks"), get(checks))
 }
 
+/// Queue (or find) an engine job for a view. Anonymous visitors of public projects only get answers that
+/// already exist: they cannot make the engine compute arbitrary version pairs (hosted cost, decision N7).
+async fn view_job(state: &AppState, user: &MaybeUser, project_id: uuid::Uuid, kind: &str, args: serde_json::Value, key: String) -> ApiResult<jobs::JobState> {
+    if user.0.is_none() {
+        let existing: Option<jobs::JobState> = sqlx::query_as("SELECT id, kind, status, progress, result, error FROM jobs WHERE cache_key = $1")
+            .bind(&key)
+            .fetch_optional(&state.db)
+            .await?;
+        return existing.ok_or_else(|| AppError::new(axum::http::StatusCode::UNAUTHORIZED, "sign_in", "sign in to compare versions"));
+    }
+    jobs::enqueue(&state.db, project_id, kind, args, Some(&key)).await
+}
+
 #[derive(Deserialize)]
 struct Pair {
     from: String,
@@ -38,14 +51,14 @@ struct Pair {
 async fn compare(State(state): State<AppState>, user: MaybeUser, Path((owner, slug)): Path<(String, String)>, Query(q): Query<Pair>) -> ApiResult<Response> {
     let (p, _, git) = load(&state, &user, &owner, &slug).await?;
     let (a, b) = (git.resolve(&q.from).await?, git.resolve(&q.to).await?);
-    let job = jobs::enqueue(&state.db, p.id, "compare", json!({"from": a, "to": b}), Some(&jobs::key(&p, "compare", &[&a, &b]))).await?;
+    let job = view_job(&state, &user, p.id, "compare", json!({"from": a, "to": b}), jobs::key(&p, "compare", &[&a, &b])).await?;
     Ok(respond(job))
 }
 
 async fn settings_diff(State(state): State<AppState>, user: MaybeUser, Path((owner, slug)): Path<(String, String)>, Query(q): Query<Pair>) -> ApiResult<Response> {
     let (p, _, git) = load(&state, &user, &owner, &slug).await?;
     let (a, b) = (git.resolve(&q.from).await?, git.resolve(&q.to).await?);
-    let job = jobs::enqueue(&state.db, p.id, "settings_diff", json!({"from": a, "to": b}), Some(&jobs::key(&p, "settings_diff", &[&a, &b]))).await?;
+    let job = view_job(&state, &user, p.id, "settings_diff", json!({"from": a, "to": b}), jobs::key(&p, "settings_diff", &[&a, &b])).await?;
     Ok(respond(job))
 }
 
@@ -69,8 +82,7 @@ async fn history(
         return Err(AppError::bad_request("not an element id"));
     }
     let rev = git.resolve(q.rev.as_deref().unwrap_or(&p.default_option)).await?;
-    let job = jobs::enqueue(&state.db, p.id, "element_history", json!({"guid": guid, "rev": rev}), Some(&jobs::key(&p, "history", &[&guid, &rev])))
-        .await?;
+    let job = view_job(&state, &user, p.id, "element_history", json!({"guid": guid, "rev": rev}), jobs::key(&p, "history", &[&guid, &rev])).await?;
     Ok(respond(job))
 }
 
