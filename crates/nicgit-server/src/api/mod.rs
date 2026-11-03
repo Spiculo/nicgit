@@ -9,7 +9,8 @@ pub mod jobs;
 pub mod orgs;
 pub mod projects;
 pub mod versions;
+pub mod views;
 
 pub fn router() -> Router<AppState> {
-    Router::new().merge(auth::router()).merge(orgs::router()).merge(projects::router()).merge(versions::router()).merge(internal::router()).merge(jobs::router())
+    Router::new().merge(auth::router()).merge(orgs::router()).merge(projects::router()).merge(versions::router()).merge(internal::router()).merge(jobs::router()).merge(views::router())
 }
