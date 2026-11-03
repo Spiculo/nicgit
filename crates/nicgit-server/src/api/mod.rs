@@ -3,6 +3,7 @@
 use crate::app::AppState;
 use axum::Router;
 
+pub mod accounts;
 pub mod auth;
 pub mod inbox;
 pub mod internal;
@@ -32,4 +33,5 @@ pub fn router(max_upload_mb: u64) -> Router<AppState> {
         .merge(milestones::router())
         .merge(transfer::router(max_upload_mb))
         .merge(inbox::router())
+        .merge(accounts::router())
 }

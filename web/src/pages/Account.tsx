@@ -24,6 +24,8 @@ export function Account() {
   const create = useAction((n: string) => api<{ token: string }>('/api/me/tokens', { method: 'POST', json: { name: n } }), [['/api/me/tokens']])
   const revoke = useAction((id: string) => api(`/api/me/tokens/${id}`, { method: 'DELETE' }), [['/api/me/tokens']])
   const setLang = useAction((l: string) => api('/api/me', { method: 'PATCH', json: { lang: l } }), [['/api/me']])
+  const ai = useApi<{ enabled: boolean; router: boolean }>(me.data ? `/api/accounts/${me.data.slug}/ai` : null)
+  const setAi = useAction((enabled: boolean) => api(`/api/accounts/${me.data!.slug}/ai`, { method: 'PUT', json: { enabled } }), [[`/api/accounts/${me.data?.slug}/ai`]])
   const newOrg = useAction((slug: string) => api('/api/orgs', { method: 'POST', json: { slug } }), [['/api/me']])
 
   return (
@@ -89,6 +91,18 @@ export function Account() {
           ))}
         </div>
       </section>
+
+      {ai.data && (
+        <section className="stack" style={{ marginTop: '2.5rem' }}>
+          <h2>{t('account.ai')}</h2>
+          <p className="muted">{t('account.aiHint')}</p>
+          {!ai.data.router && <p className="notice warn">{t('account.aiNoRouter')}</p>}
+          <label style={{ fontWeight: 400, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={ai.data.enabled} onChange={(e) => setAi.mutate(e.target.checked)} />
+            {ai.data.enabled ? t('account.aiOn') : t('account.aiOff')}
+          </label>
+        </section>
+      )}
 
       <section className="stack" style={{ marginTop: '2.5rem' }}>
         <h2>{t('account.orgs')}</h2>

@@ -10,6 +10,7 @@ pub async fn on_push(state: &AppState, project: &Project, user: Option<Uuid>, up
         let (Some(option), Some(new)) = (u.option(), &u.new) else { continue };
         crate::proposals::on_option_moved(state, project, option, new).await?;
         crate::jobs::enqueue_summary(state, project, new).await?;
+        crate::actions::on_head(state, project, option, new).await?;
     }
     crate::metering::sample_storage(state, project).await?;
     Ok(())
@@ -26,7 +27,7 @@ pub async fn on_job_finished(
     error: Option<&str>,
 ) -> ApiResult<()> {
     let (Some(result), None) = (result, error) else { return Ok(()) };
-    if kind != "import_kim" && kind != "import_ifc" {
+    if !matches!(kind, "import_kim" | "import_ifc" | "checks") {
         return Ok(());
     }
     let p: Project = sqlx::query_as(&format!(
@@ -36,6 +37,9 @@ pub async fn on_job_finished(
     .bind(project)
     .fetch_one(&state.db)
     .await?;
+    if kind == "checks" {
+        return crate::actions::on_finished(state, &p, result).await;
+    }
     let actor = args["by"].as_str().and_then(|s| Uuid::parse_str(s).ok());
     let heads: Vec<String> = match kind {
         "import_kim" => {

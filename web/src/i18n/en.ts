@@ -253,6 +253,21 @@ export const en = {
   'common.copy': 'Copy',
   'common.copied': 'Copied',
   'common.you': 'you',
+  'ai.generate': 'Summarise with AI',
+  'ai.working': 'Asking the AI…',
+  'ai.label': 'Written by AI from the engine’s change list. Check it against the changes.',
+  'checks.title': 'Checks',
+  'checks.none': 'No checks are required for this option.',
+  'checks.pending': 'Running the required checks: {names}',
+  'checks.passed': 'Required checks passed: {names}',
+  'checks.failed': 'Required checks failed: {names}',
+  'account.ai': 'AI',
+  'account.aiHint': 'When on, NicGit can send change lists (never model files) to the AI router to write summaries. Usage counts against your AI budget.',
+  'account.aiOn': 'AI is on',
+  'account.aiOff': 'AI is off',
+  'account.aiNoRouter': 'This server has no AI router configured.',
+  'account.budgets': 'Monthly limits',
+  'account.hardLimit': 'Stop at',
 }
 
 export type Key = keyof typeof en

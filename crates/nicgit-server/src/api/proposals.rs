@@ -38,6 +38,7 @@ pub fn router() -> Router<AppState> {
         .route(&format!("{base}/{{number}}/close"), post(close))
         .route(&format!("{base}/{{number}}/preview"), get(preview))
         .route(&format!("{base}/{{number}}/combine"), post(combine))
+        .route(&format!("{base}/{{number}}/ai-summary"), post(ai_summary))
 }
 
 async fn load(state: &AppState, owner: &str, slug: &str, user: Option<Uuid>, need: Role) -> ApiResult<(Project, Role, Git)> {
@@ -169,10 +170,14 @@ async fn detail(
         .collect();
     let can_combine = prop.state == "open" && role >= if protected { Role::Lead } else { Role::Member };
     let ai = crate::ai::proposal_summary_cached(&state, &p, &prop).await?;
+    if prop.state == "open" && !rule.required_checks.is_empty() && crate::actions::existing(&state, &p, &prop.source_head, &rule.required_checks).await?.is_none() {
+        let _ = crate::actions::run(&state, &p, &prop.source_head, &rule.required_checks).await;
+    }
+    let checks = crate::actions::status(&state, &p, &prop.source_head, &rule.required_checks).await?;
     Ok(Json(json!({
         "proposal": prop, "reviews": reviews, "comments": comments, "rule": rule, "protected": protected,
         "approvals": eval, "settings_changed": settings_changed, "can_combine": can_combine, "role": role,
-        "can_review": uid.is_some() && role >= Role::Reviewer, "ai_summary": ai,
+        "can_review": uid.is_some() && role >= Role::Reviewer, "ai_summary": ai, "checks": checks,
     })))
 }
 
@@ -340,6 +345,12 @@ async fn combine(
     if !eval.ok {
         return Err(AppError::new(StatusCode::CONFLICT, "approvals_missing", serde_json::to_string(&eval.missing).unwrap_or_default()));
     }
+    let checks = crate::actions::status(&state, &p, &prop.source_head, &rule.required_checks).await?;
+    match checks["state"].as_str() {
+        Some("pending") => return Err(AppError::conflict("checks_pending", "the required checks have not finished on the latest version")),
+        Some("failed") => return Err(AppError::conflict("checks_failed", "the required checks failed on the latest version")),
+        _ => {}
+    }
     let lock = ProjectLock::try_take(&state, p.id).await?.ok_or_else(|| AppError::conflict("busy", "another combine is running on this project"))?;
     let result = run_combine(&state, &p, &prop, &user, &git, mode, &b).await;
     lock.release().await;
@@ -430,4 +441,34 @@ Mode: {}",
     jobs::enqueue_summary(state, p, &commit).await?;
     proposals::on_option_moved(state, p, &prop.target, &commit).await?;
     Ok(Json(json!({"commit": commit, "status": job.result.as_ref().and_then(|r| r["status"].as_str())})))
+}
+
+/// An AI summary of the proposal's changes, from the engine's compare of its two heads (spec section 13).
+async fn ai_summary(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path((owner, slug, number)): Path<(String, String, i32)>,
+) -> ApiResult<Response> {
+    let (p, _, _) = load(&state, &owner, &slug, Some(user.id), Role::Reviewer).await?;
+    let prop = load_proposal(&state, &p, number).await?;
+    if let Some(cached) = crate::ai::proposal_summary_cached(&state, &p, &prop).await? {
+        return Ok(axum::response::IntoResponse::into_response(Json(cached)));
+    }
+    crate::ai::ensure_available(&state, &p).await?;
+    let job = jobs::enqueue(
+        &state.db,
+        p.id,
+        "compare",
+        json!({"from": prop.target_head, "to": prop.source_head}),
+        Some(&jobs::key(&p, "compare", &[&prop.target_head, &prop.source_head])),
+    )
+    .await?;
+    let job = jobs::wait(&state.db, job.id, Duration::from_secs(120)).await?;
+    if !job.done() {
+        return Ok(respond(job));
+    }
+    let compare = job.result.unwrap_or_default();
+    let lang: String = sqlx::query_scalar("SELECT lang FROM users WHERE account_id = $1").bind(user.id).fetch_one(&state.db).await?;
+    let out = crate::ai::summarize_proposal(&state, &p, &prop, &compare, &lang).await?;
+    Ok(axum::response::IntoResponse::into_response(Json(out)))
 }

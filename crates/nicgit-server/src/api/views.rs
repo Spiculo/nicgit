@@ -26,6 +26,7 @@ pub fn router() -> Router<AppState> {
         .route(&format!("{base}/settings-diff"), get(settings_diff))
         .route(&format!("{base}/elements/{{guid}}/history"), get(history))
         .route(&format!("{base}/versions/{{rev}}/model.ifc"), get(model_ifc))
+        .route(&format!("{base}/versions/{{rev}}/checks"), get(checks))
 }
 
 #[derive(Deserialize)]
@@ -107,4 +108,27 @@ async fn model_ifc(
         Body::from_stream(ReaderStream::new(file)),
     )
         .into_response())
+}
+
+#[derive(Deserialize)]
+struct ChecksQuery {
+    names: String,
+}
+
+/// Run (or read) checks on a version: an Action, so members only, and stopped by a spent budget.
+async fn checks(
+    State(state): State<AppState>,
+    user: crate::auth::CurrentUser,
+    Path((owner, slug, rev)): Path<(String, String, String)>,
+    Query(q): Query<ChecksQuery>,
+) -> ApiResult<Response> {
+    let (p, _) = crate::access::load(&state, &owner, &slug, Some(user.id), nicgit_core::roles::Role::Member).await?;
+    let git = crate::gitread::Git::new(&p.repo_dir(&state));
+    let commit = git.resolve(&rev).await?;
+    let names: Vec<String> = q.names.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect();
+    if names.is_empty() {
+        return Err(AppError::bad_request("name at least one check"));
+    }
+    let job = crate::actions::run(&state, &p, &commit, &names).await?;
+    Ok(respond(job))
 }

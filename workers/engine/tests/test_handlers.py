@@ -125,3 +125,19 @@ def test_combine_with_unresolved_conflicts_fails(unmerged, tmp_path):
 def test_unknown_kind_rejected(repo, tmp_path):
     with pytest.raises(handlers.JobError):
         handlers.run("rm_rf", repo, {}, ctx(tmp_path))
+
+
+def test_checks_run_on_a_version(repo, tmp_path):
+    out = handlers.run("checks", repo, {"rev": "main", "checks": ["schema", "model"]}, ctx(tmp_path))
+    names = [c["check"] for c in out["checks"]]
+    assert names == ["schema", "model"]
+    for c in out["checks"]:
+        assert set(c["counts"]) == {"error", "warning", "info"}
+        assert c["seconds"] >= 0
+    assert out["passed"] == (not any(c["failed"] for c in out["checks"]))
+    assert out["seconds"] >= 0
+
+
+def test_checks_reject_unknown(repo, tmp_path):
+    with pytest.raises(handlers.JobError, match="unknown check"):
+        handlers.run("checks", repo, {"rev": "main", "checks": ["rm"]}, ctx(tmp_path))

@@ -42,6 +42,7 @@ interface Detail {
   can_combine: boolean
   can_review: boolean
   ai_summary: { text: string } | null
+  checks: { required: string[]; state: 'none' | 'pending' | 'passed' | 'failed' }
 }
 
 interface Conflict {
@@ -315,6 +316,44 @@ function Combine({ d, onDone }: { d: Detail; onDone: () => void }) {
   )
 }
 
+function AiSummary({ d, onDone }: { d: Detail; onDone: () => void }) {
+  const t = useT()
+  const ctx = useProject()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  if (d.ai_summary)
+    return (
+      <section className="notice">
+        <strong>{t('proposals.aiSummary')}</strong>
+        <p style={{ whiteSpace: 'pre-wrap', margin: '0.4rem 0' }}>{d.ai_summary.text}</p>
+        <span className="small muted">{t('ai.label')}</span>
+      </section>
+    )
+  if (!d.can_review || d.proposal.state !== 'open') return null
+  return (
+    <div className="row">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true)
+          setError(null)
+          try {
+            await api(ctx.api(`/proposals/${d.proposal.number}/ai-summary`), { method: 'POST' })
+            onDone()
+          } catch (e) {
+            setError(e instanceof ApiError ? e.message : String(e))
+          }
+          setBusy(false)
+        }}
+      >
+        {busy ? t('ai.working') : t('ai.generate')}
+      </button>
+      {error && <span className="small muted">{error}</span>}
+    </div>
+  )
+}
+
 export function ProposalDetail() {
   const t = useT()
   const lang = useLang()
@@ -365,11 +404,11 @@ export function ProposalDetail() {
           {tab === 'overview' && (
             <>
               {p.body && <p style={{ whiteSpace: 'pre-wrap' }}>{p.body}</p>}
-              {d.ai_summary && (
-                <section className="notice">
-                  <strong>{t('proposals.aiSummary')}</strong>
-                  <p style={{ whiteSpace: 'pre-wrap', marginTop: '0.4rem' }}>{d.ai_summary.text}</p>
-                </section>
+              <AiSummary d={d} onDone={refresh} />
+              {d.checks.state !== 'none' && (
+                <p className={`notice ${d.checks.state === 'failed' ? 'bad' : d.checks.state === 'pending' ? 'warn' : ''}`}>
+                  {t(`checks.${d.checks.state}` as 'checks.passed', { names: d.checks.required.join(', ') })}
+                </p>
               )}
               <section>
                 <h2>{t('proposals.approvals')}</h2>

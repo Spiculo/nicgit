@@ -99,6 +99,57 @@ def element_history(project: Project, args: dict, ctx: Context) -> dict:
         for c, kind in history]}
 
 
+# ---- checks (Actions) ----
+
+def _ids_files(settings: dict) -> dict:
+    """The IDS files a version's settings name, as {name: xml}. Files linked from a folder on someone's
+    machine (a dict with a path) cannot be read on the server and are skipped."""
+    out = {}
+    for name, entry in (settings.get("ids_files") or {}).items():
+        if isinstance(entry, str):
+            out[name] = entry
+        elif isinstance(entry, dict) and isinstance(entry.get("xml"), str):
+            out[name] = entry["xml"]
+    return out
+
+
+def checks(project: Project, args: dict, ctx: Context) -> dict:
+    """Run the engine's checks (schema, IDS, clash, model) on a version, as an Action."""
+    import time
+
+    import ifcopenshell
+    from kimbim import checks as C
+
+    names = list(args.get("checks") or [])
+    unknown = [n for n in names if n not in C.RUNNERS]
+    if unknown:
+        raise JobError(f"unknown check: {', '.join(unknown)}")
+    rev = _commit(project, args["rev"])
+    t0 = time.perf_counter()
+    path = ctx.cache_dir / "ifc" / f"{rev}.ifc"
+    if not path.is_file():
+        export_ifc(project, {"rev": rev}, ctx)
+    model = ifcopenshell.open(str(path))
+    settings = S.from_bytes(project.settings_at(rev))
+    results = []
+    for i, name in enumerate(names):
+        options = {"ids": _ids_files(settings)} if name == "ids" else {}
+        if name == "clash":
+            options = {"clash_sets": settings.get("clash_sets") or {}}
+        try:
+            out = C.run(model, name, options)
+            results.append({"check": name, "title": out["title"], "ok": True, "total": out["total"], "counts": out["counts"],
+                            "issues": _jsonable(out["issues"][:200]), "truncated": out["total"] > 200, "seconds": out["seconds"],
+                            "detail": out.get("detail", ""), "failed": out["total"] > 0 and out["counts"].get("error", 0) > 0})
+        except Exception as ex:  # noqa: BLE001 (a broken checker fails the check, never passes it)
+            results.append({"check": name, "title": name, "ok": False, "error": f"{type(ex).__name__}: {ex}", "total": 1,
+                            "counts": {"error": 1, "warning": 0, "info": 0}, "issues": [], "truncated": False,
+                            "seconds": 0.0, "failed": True})
+        ctx.progress((i + 1) / max(len(names), 1))
+    return {"rev": rev, "checks": results, "passed": not any(r["failed"] for r in results),
+            "seconds": round(time.perf_counter() - t0, 3)}
+
+
 # ---- combining options ----
 
 class _OnOption:
@@ -199,6 +250,7 @@ HANDLERS = {
     "settings_diff": settings_diff,
     "export_ifc": export_ifc,
     "element_history": element_history,
+    "checks": checks,
 }
 WORKTREE_HANDLERS = {
     "merge_preview": merge_preview,
