@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Development database for NicGit (port 5434 so it never collides with other local Postgres instances).
+name: nicgit-dev
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: nicgit
+      POSTGRES_PASSWORD: nicgit
+      POSTGRES_DB: nicgit
+    ports: ["127.0.0.1:5434:5432"]
+    volumes: [nicgit-dev-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nicgit"]
+      interval: 2s
+      retries: 30
+volumes:
+  nicgit-dev-db: {}
