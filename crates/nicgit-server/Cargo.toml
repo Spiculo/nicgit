@@ -39,6 +39,7 @@ anyhow = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 bytes = "1"
 time = "0.3"
+async-compression = { version = "0.4", features = ["tokio", "gzip"] }
 
 [dev-dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "cookies", "multipart"] }

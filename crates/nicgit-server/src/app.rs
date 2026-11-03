@@ -17,7 +17,7 @@ pub async fn build(cfg: Arc<Config>) -> anyhow::Result<(Router, AppState)> {
     std::fs::create_dir_all(cfg.data_dir.join("cache"))?;
     std::fs::create_dir_all(cfg.data_dir.join("uploads"))?;
     let state = AppState { db, cfg };
-    let router = Router::new().route("/api/health", get(health)).merge(crate::api::router()).with_state(state.clone());
+    let router = Router::new().route("/api/health", get(health)).merge(crate::api::router()).merge(crate::git::http::router()).with_state(state.clone());
     Ok((router, state))
 }
 
