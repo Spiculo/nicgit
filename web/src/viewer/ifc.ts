@@ -23,6 +23,9 @@ export interface PropertyGroup {
   values: [string, string][]
 }
 
+/** Drawn only when selected: volumes and helpers that would hide the building. */
+export const HIDDEN_TYPES = new Set(['IFCSPACE', 'IFCOPENINGELEMENT', 'IFCANNOTATION', 'IFCVIRTUALELEMENT', 'IFCGRID'])
+
 let apiPromise: Promise<WebIFC.IfcAPI> | null = null
 
 function ifcApi(): Promise<WebIFC.IfcAPI> {
@@ -117,7 +120,8 @@ export async function loadIfc(data: Uint8Array, only?: Set<string>): Promise<Loa
     g.setIndex(e.indices)
     const mesh = new THREE.Mesh(g, material(e.color, e.opacity))
     const info: ElementInfo = { expressId: id, guid, type: api.GetNameFromTypeCode(api.GetLineType(modelId, id)), name: text(line.Name) }
-    mesh.userData = { guid, baseColor: e.color, baseOpacity: e.opacity }
+    mesh.userData = { guid, baseColor: e.color, baseOpacity: e.opacity, hidden: HIDDEN_TYPES.has(info.type.toUpperCase()) }
+    mesh.visible = !mesh.userData.hidden
     group.add(mesh)
     elements.set(guid, { mesh, info })
   }

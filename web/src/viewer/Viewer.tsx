@@ -91,7 +91,8 @@ export function Viewer({ model, highlight, ghostModel, selected, onSelect, child
   function fit() {
     const s = scene.current
     if (!s || !loaded.current) return
-    const box = new THREE.Box3().setFromObject(loaded.current.group)
+    const box = new THREE.Box3()
+    for (const { mesh } of loaded.current.elements.values()) if (mesh.visible) box.expandByObject(mesh)
     if (box.isEmpty()) return
     const size = box.getSize(new THREE.Vector3()).length()
     const center = box.getCenter(new THREE.Vector3())
@@ -115,10 +116,12 @@ export function Viewer({ model, highlight, ghostModel, selected, onSelect, child
       let alpha = opacity
       if (highlight) {
         color = kind ? new THREE.Color(CHANGE_COLORS[kind]) : PALE
-        alpha = kind ? Math.max(opacity, 0.95) : Math.min(opacity, 0.35)
+        alpha = kind ? 1 : Math.min(opacity, 0.22)
       }
       if (guid === selRef.current) color = new THREE.Color('#24508F')
-      mesh.material = material(color, alpha)
+      // Hidden helpers (spaces, openings) show only while selected.
+      mesh.visible = !mesh.userData.hidden || guid === selRef.current
+      mesh.material = material(color, mesh.userData.hidden ? 0.35 : alpha)
     }
     scene.current?.render()
   }
