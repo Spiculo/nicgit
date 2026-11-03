@@ -1,0 +1,9 @@
+target/
+node_modules/
+web/dist/
+.superpowers/
+data/
+*.log
+__pycache__/
+.pytest_cache/
+.pixi/
