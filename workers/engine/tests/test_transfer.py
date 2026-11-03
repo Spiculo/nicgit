@@ -117,3 +117,14 @@ def test_export_kim_latest_has_one_commit(m5_kim, tmp_path):
     assert git(folder, "rev-list", "--count", "main") == "1"
     assert git(folder, "rev-parse", "main^{tree}") == git(repo, "rev-parse", "main^{tree}")
     assert git(folder, "branch", "--format=%(refname:short)") == "main"
+
+
+def test_import_kim_from_before_the_rename_explains(tmp_path):
+    old = tmp_path / "uploads" / "old.kim"
+    old.parent.mkdir(exist_ok=True)
+    with zipfile.ZipFile(old, "w") as z:
+        z.writestr("kimcad-file.json", '{"format": "kim", "version": 1, "kind": "project"}')
+        z.writestr(".git/HEAD", "ref: refs/heads/main\n")
+    repo = empty_repo(tmp_path / "repo")
+    with pytest.raises(handlers.JobError, match="older version"):
+        handlers.run("import_kim", repo, {"upload": old.name, "max_bytes": 1 << 30}, ctx(tmp_path))

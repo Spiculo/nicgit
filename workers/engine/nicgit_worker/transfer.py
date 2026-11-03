@@ -50,8 +50,12 @@ def import_kim(repo: pathlib.Path, args: dict, ctx: Context) -> dict:
         try:
             with zipfile.ZipFile(kim) as z:
                 total = sum(i.file_size for i in z.infolist())
+                legacy = kimfile.MANIFEST not in z.namelist() and "kimcad-file.json" in z.namelist()
         except (zipfile.BadZipFile, OSError):
             raise JobError("this is not a KimBim .kim file, or it is damaged") from None
+        if legacy:
+            raise JobError("this .kim was made by an older version of the app (KimCad, before the rename) and its records "
+                           "use the old format; open it in the current NicBim, save it, and upload it again")
         limit = min(int(args.get("max_bytes", 1 << 34)), MAX_RATIO * max(kim.stat().st_size, 1))
         if total > limit:
             raise JobError(f"the .kim unpacks to {total >> 20} MB, which is too large to import")
