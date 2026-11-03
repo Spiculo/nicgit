@@ -20,7 +20,7 @@ pub async fn build(cfg: Arc<Config>) -> anyhow::Result<(Router, AppState)> {
     let state = AppState { db, cfg };
     let mut router = Router::new()
         .route("/api/health", get(health))
-        .merge(crate::api::router())
+        .merge(crate::api::router(state.cfg.max_upload_mb))
         .merge(crate::git::http::router())
         .route("/api/{*rest}", axum::routing::any(api_not_found))
         .with_state(state.clone());

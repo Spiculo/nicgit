@@ -7,6 +7,7 @@ pub mod api;
 pub mod app;
 pub mod audit;
 pub mod auth;
+pub mod bcf;
 pub mod config;
 pub mod db;
 pub mod error;

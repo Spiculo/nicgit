@@ -9,6 +9,7 @@ import { Viewer } from '../viewer/Viewer'
 import type { PropertyGroup } from '../viewer/ifc'
 import { useProject } from './ProjectLayout'
 import { JobWait } from '../components/States'
+import { JobDownload } from '../components/JobDownload'
 
 export function TitleBlock({ title, option, version }: { title: string; option: string; version?: Version | null }) {
   const t = useT()
@@ -111,14 +112,22 @@ export function Overview() {
   const [params, setParams] = useSearchParams()
   const [sel, setSel] = useState<{ guid: string; props: PropertyGroup[] } | null>(null)
   const option = params.get('option') ?? overview.options.find((o) => o.is_default)?.name ?? overview.options[0]?.name
-  const head = overview.options.find((o) => o.name === option)
+  const optionHead = overview.options.find((o) => o.name === option)
+  // ?rev= shows a specific version (a milestone or an issue's version) instead of the option's latest.
+  const rev = params.get('rev')
+  const head = optionHead && (rev ? { ...optionHead, head: rev } : optionHead)
+  const select = params.get('select')
   const latest = useApi<Version[]>(option ? ctx.api(`/versions?option=${encodeURIComponent(option)}&limit=1`) : null)
   if (overview.empty || !option || !head) return <EmptyProject />
   const version = latest.data?.[0] ?? null
 
   return (
     <div className="split">
-      <Viewer model={ctx.api(`/versions/${head.head}/model.ifc`)} onSelect={(guid, props) => setSel(guid ? { guid, props } : null)}>
+      <Viewer
+        model={ctx.api(`/versions/${head.head}/model.ifc`)}
+        selected={select ?? undefined}
+        onSelect={(guid, props) => setSel(guid ? { guid, props } : null)}
+      >
         <TitleBlock title={overview.project.full_name} option={option} version={version} />
       </Viewer>
       <aside className="side">
@@ -128,6 +137,13 @@ export function Overview() {
               {t('common.back')}
             </button>
             <ElementPanel guid={sel.guid} props={sel.props} rev={head.head} />
+            {ctx.can('reviewer') && (
+              <p style={{ marginTop: '1rem' }}>
+                <Link className="btn" to={`${ctx.base}/issues/new?element=${encodeURIComponent(sel.guid)}&version=${head.head}`}>
+                  {t('issues.new')}
+                </Link>
+              </p>
+            )}
           </>
         ) : (
           <>
@@ -166,7 +182,8 @@ export function Overview() {
             <p style={{ marginTop: '1rem' }}>
               <a className="btn" href={ctx.api(`/versions/${head.head}/model.ifc`)} download>
                 {t('overview.download')}
-              </a>
+              </a>{' '}
+              <JobDownload href={ctx.api(`/export.kim?scope=full`)}>.kim</JobDownload>
             </p>
             <h3>{t('overview.clone')}</h3>
             <code className="small" style={{ overflowWrap: 'anywhere' }}>
