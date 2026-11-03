@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# NicGit engine worker: the KimBim engine (Python + IfcOpenShell + the Rust core) and the NicGit job runner.
+#   docker buildx build -f deploy/Dockerfile.worker --build-context kimcad=../kimcad -t nicgit-worker .
+# It uses kimcad's default pixi environment so the engine runs exactly as it is tested there. A slimmer
+# engine-only environment is future work (docs/future-work.md).
+FROM ghcr.io/prefix-dev/pixi:0.81.0 AS build
+WORKDIR /kimcad
+COPY --from=kimcad pixi.toml pixi.lock pyproject.toml Cargo.toml Cargo.lock ./
+COPY --from=kimcad tools/conda_pypi_map.json tools/conda_pypi_map.json
+RUN pixi install --locked -e default
+COPY --from=kimcad crates ./crates
+COPY --from=kimcad python ./python
+RUN pixi run -e default build
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/* \
+ && useradd --system --home /var/lib/nicgit --create-home nicgit
+COPY --from=build /kimcad/.pixi/envs/default /opt/engine
+COPY --from=build /kimcad/python /opt/kimcad/python
+COPY workers/engine/nicgit_worker /opt/nicgit/nicgit_worker
+ENV PATH=/opt/engine/bin:$PATH PYTHONPATH=/opt/kimcad/python:/opt/nicgit PYTHONDONTWRITEBYTECODE=1
+USER nicgit
+CMD ["python", "-m", "nicgit_worker"]

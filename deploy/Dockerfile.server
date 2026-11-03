@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# NicGit server image: the Rust server, the built web app and git.
+# Build from this repository with the engine checkout as a named context:
+#   docker buildx build -f deploy/Dockerfile.server --build-context kimcad=../kimcad -t nicgit-server .
+FROM node:22-bookworm-slim AS web
+WORKDIR /src/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY web/ ./
+RUN npm run build
+
+FROM rust:1-bookworm AS server
+WORKDIR /src/nicgit
+COPY --from=kimcad crates /src/kimcad/crates
+COPY --from=kimcad Cargo.toml /src/kimcad/Cargo.toml
+COPY Cargo.toml Cargo.lock* ./
+COPY crates ./crates
+RUN cargo build --release -p nicgit-server
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/* \
+ && useradd --system --home /var/lib/nicgit --create-home nicgit
+COPY --from=server /src/nicgit/target/release/nicgit-server /usr/local/bin/nicgit-server
+COPY --from=web /src/web/dist /usr/share/nicgit/web
+ENV NICGIT_BIND=0.0.0.0:3000 NICGIT_DATA_DIR=/var/lib/nicgit/data NICGIT_WEB_DIR=/usr/share/nicgit/web
+USER nicgit
+EXPOSE 3000
+CMD ["nicgit-server"]

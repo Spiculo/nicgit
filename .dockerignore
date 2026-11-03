@@ -1,0 +1,8 @@
+target/
+data/
+**/node_modules/
+web/dist/
+web/public/wasm/
+.superpowers/
+.git/
+**/__pycache__/
