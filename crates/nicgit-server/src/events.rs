@@ -14,3 +14,17 @@ pub async fn on_push(state: &AppState, project: &Project, user: Option<Uuid>, up
     crate::metering::sample_storage(state, project).await?;
     Ok(())
 }
+
+/// A worker finished a job: follow-ups such as Actions metering and AI summaries.
+pub async fn on_job_finished(
+    state: &AppState,
+    project: Uuid,
+    _job: Uuid,
+    kind: &str,
+    _args: &serde_json::Value,
+    _result: Option<&serde_json::Value>,
+    _error: Option<&str>,
+) -> ApiResult<()> {
+    let _ = (state, project, kind);
+    Ok(())
+}

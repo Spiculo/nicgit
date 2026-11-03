@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Test harness: a server on a random port with its own database and data folder.
 #![allow(dead_code)]
+pub mod engine;
 pub mod git;
 use nicgit_server::{config::Config, app};
 use serde_json::{json, Value};
