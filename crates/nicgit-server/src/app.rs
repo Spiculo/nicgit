@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use crate::config::Config;
 use axum::{routing::get, Json, Router};
+use tower_http::services::{ServeDir, ServeFile};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -17,10 +18,24 @@ pub async fn build(cfg: Arc<Config>) -> anyhow::Result<(Router, AppState)> {
     std::fs::create_dir_all(cfg.data_dir.join("cache"))?;
     std::fs::create_dir_all(cfg.data_dir.join("uploads"))?;
     let state = AppState { db, cfg };
-    let router = Router::new().route("/api/health", get(health)).merge(crate::api::router()).merge(crate::git::http::router()).with_state(state.clone());
+    let mut router = Router::new()
+        .route("/api/health", get(health))
+        .merge(crate::api::router())
+        .merge(crate::git::http::router())
+        .route("/api/{*rest}", axum::routing::any(api_not_found))
+        .with_state(state.clone());
+    if let Some(dir) = &state.cfg.web_dir {
+        // The web app: static files, and index.html for every other path (client-side routes).
+        let index = dir.join("index.html");
+        router = router.fallback_service(ServeDir::new(dir).fallback(ServeFile::new(index)));
+    }
     Ok((router, state))
 }
 
 async fn health() -> Json<Value> {
     Json(json!({"ok": true, "version": env!("CARGO_PKG_VERSION")}))
+}
+
+async fn api_not_found() -> crate::error::AppError {
+    crate::error::AppError::not_found()
 }
