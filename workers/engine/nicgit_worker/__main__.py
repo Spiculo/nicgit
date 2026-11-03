@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import threading
 import os
 import pathlib
 import time
@@ -46,10 +47,28 @@ class Client:
         self._post(f"/internal/jobs/{job_id}/finish", {"result": result} if error is None else {"error": error})
 
 
-def run_one(client: Client, job: dict) -> None:
-    ctx = handlers.Context(cache_dir=pathlib.Path(job["cache_dir"]), progress=lambda f: client.progress(job["id"], f))
+HEARTBEAT_SECONDS = 60.0
+
+
+def run_one(client: Client, job: dict, heartbeat: float = HEARTBEAT_SECONDS) -> None:
+    last = {"fraction": 0.0}
+
+    def report(fraction: float) -> None:
+        last["fraction"] = fraction
+        client.progress(job["id"], fraction)
+
+    ctx = handlers.Context(cache_dir=pathlib.Path(job["cache_dir"]), progress=report)
     ctx.uploads_dir = pathlib.Path(job.get("uploads_dir") or ".")
     started = time.monotonic()
+    # Report regularly however long the job takes: the server hands out again only jobs that go silent.
+    stop = threading.Event()
+
+    def beat() -> None:
+        while not stop.wait(heartbeat):
+            client.progress(job["id"], last["fraction"])
+
+    beater = threading.Thread(target=beat, daemon=True)
+    beater.start()
     try:
         result = handlers.run(job["kind"], pathlib.Path(job["repo"]), job["args"], ctx)
         result = json.loads(json.dumps(result, default=str))
@@ -63,6 +82,9 @@ def run_one(client: Client, job: dict) -> None:
     except Exception as e:  # noqa: BLE001 (report every failure to the server; keep serving)
         log.error("%s %s crashed:\n%s", job["kind"], job["id"], traceback.format_exc())
         client.finish(job["id"], error=f"internal error in the engine worker: {type(e).__name__}")
+    finally:
+        stop.set()
+        beater.join(timeout=5)
 
 
 def main(argv=None) -> int:

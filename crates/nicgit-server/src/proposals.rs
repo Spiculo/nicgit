@@ -161,8 +161,25 @@ pub async fn on_option_moved(state: &AppState, project: &Project, option: &str, 
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
-    for (_, number, _) in moved {
+    for (_, number, target) in moved {
         set_ref(state, project, number, head).await?;
+        queue_required_checks(state, project, &target, head).await?;
     }
     Ok(())
+}
+
+/// The target option's required checks on a proposal's source head: queued when the proposal opens and
+/// when its source moves, never by someone viewing it (Actions cost the project owner).
+pub async fn queue_required_checks(state: &AppState, project: &Project, target: &str, source_head: &str) -> ApiResult<()> {
+    let (rule, _) = rule(state, project.id, target).await?;
+    if rule.required_checks.is_empty() {
+        return Ok(());
+    }
+    match crate::actions::run(state, project, source_head, &rule.required_checks).await {
+        Err(e) if e.code == "budget_exceeded" => {
+            crate::activity::record(&state.db, project.id, None, "actions.skipped", serde_json::json!({"reason": "budget", "commit": source_head})).await?;
+            Ok(())
+        }
+        other => other.map(|_| ()),
+    }
 }

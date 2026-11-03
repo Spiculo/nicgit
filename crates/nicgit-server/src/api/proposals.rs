@@ -139,6 +139,7 @@ async fn create(
     }
     crate::jobs::enqueue(&state.db, p.id, "merge_preview", json!({"target": b.target, "source": source_head}), Some(&preview_key(&p, &target_head, &source_head)))
         .await?;
+    crate::proposals::queue_required_checks(&state, &p, &b.target, &source_head).await?;
     let created = load_proposal(&state, &p, number).await?;
     Ok(Json(json!(created)))
 }
@@ -170,9 +171,6 @@ async fn detail(
         .collect();
     let can_combine = prop.state == "open" && role >= if protected { Role::Lead } else { Role::Member };
     let ai = crate::ai::proposal_summary_cached(&state, &p, &prop).await?;
-    if prop.state == "open" && !rule.required_checks.is_empty() && crate::actions::existing(&state, &p, &prop.source_head, &rule.required_checks).await?.is_none() {
-        let _ = crate::actions::run(&state, &p, &prop.source_head, &rule.required_checks).await;
-    }
     let checks = crate::actions::status(&state, &p, &prop.source_head, &rule.required_checks).await?;
     Ok(Json(json!({
         "proposal": prop, "reviews": reviews, "comments": comments, "rule": rule, "protected": protected,

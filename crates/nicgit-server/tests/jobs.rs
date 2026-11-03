@@ -89,3 +89,26 @@ async fn failed_job_is_requeued_on_enqueue() {
     assert_eq!(again.id, job.id);
     assert_eq!(again.status, "queued");
 }
+
+#[tokio::test]
+async fn long_job_with_heartbeat_is_not_handed_out_again() {
+    let app = common::TestApp::spawn().await;
+    let alice = app.user("alice").await;
+    let pid = project_id(&app, &alice).await;
+    let job = jobs::enqueue(&app.db, pid, "import_ifc", json!({}), None).await.unwrap();
+    let w = reqwest::Client::new();
+    let claim = || w.post(app.url("/internal/jobs/claim")).header("x-worker-token", common::WORKER_TOKEN).json(&json!({"kinds": ["import_ifc"]})).send();
+    assert_eq!(claim().await.unwrap().status(), 200);
+    // Started an hour ago, but its worker reported progress a moment ago: still alive.
+    sqlx::query("UPDATE jobs SET started_at = now() - interval '1 hour' WHERE id = $1").bind(job.id).execute(&app.db).await.unwrap();
+    w.post(app.url(&format!("/internal/jobs/{}/progress", job.id)))
+        .header("x-worker-token", common::WORKER_TOKEN)
+        .json(&json!({"progress": 0.5}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(claim().await.unwrap().status(), 204);
+    // Silent for longer than the heartbeat window: its worker is gone, hand it out again.
+    sqlx::query("UPDATE jobs SET heartbeat_at = now() - interval '20 minutes' WHERE id = $1").bind(job.id).execute(&app.db).await.unwrap();
+    assert_eq!(claim().await.unwrap().status(), 200);
+}

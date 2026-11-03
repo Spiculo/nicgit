@@ -46,14 +46,15 @@ struct Claim {
     kinds: Vec<String>,
 }
 
-/// A job left running for this long is assumed lost (its worker died) and handed out again.
-const STALE_MINUTES: i32 = 30;
+/// A running job whose worker has not reported for this long is assumed lost and handed out again.
+/// Workers report every minute (nicgit_worker's heartbeat), however long the job takes.
+const STALE_MINUTES: i32 = 10;
 
 async fn claim(State(state): State<AppState>, _w: Worker, Json(b): Json<Claim>) -> ApiResult<Response> {
     let row: Option<(Uuid, Uuid, String, Value)> = sqlx::query_as(
-        "UPDATE jobs SET status = 'running', started_at = now(), attempts = attempts + 1, progress = 0 \
+        "UPDATE jobs SET status = 'running', started_at = now(), heartbeat_at = now(), attempts = attempts + 1, progress = 0 \
          WHERE id = (SELECT id FROM jobs WHERE kind = ANY($1) AND \
-                       (status = 'queued' OR (status = 'running' AND started_at < now() - make_interval(mins => $2))) \
+                       (status = 'queued' OR (status = 'running' AND coalesce(heartbeat_at, started_at) < now() - make_interval(mins => $2))) \
                      ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) \
          RETURNING id, project_id, kind, args",
     )
@@ -78,7 +79,7 @@ struct Progress {
 }
 
 async fn progress(State(state): State<AppState>, _w: Worker, Path(id): Path<Uuid>, Json(b): Json<Progress>) -> ApiResult<Json<Value>> {
-    sqlx::query("UPDATE jobs SET progress = $2 WHERE id = $1 AND status = 'running'")
+    sqlx::query("UPDATE jobs SET progress = $2, heartbeat_at = now() WHERE id = $1 AND status = 'running'")
         .bind(id)
         .bind(b.progress.clamp(0.0, 1.0))
         .execute(&state.db)

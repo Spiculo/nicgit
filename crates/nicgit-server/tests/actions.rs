@@ -108,3 +108,23 @@ async fn action_budget_blocks_new_runs() {
     let r = alice.get(app.url("/api/projects/alice/house/versions/main/checks?names=bogus")).send().await.unwrap();
     assert_eq!(r.status(), 400);
 }
+
+#[tokio::test]
+async fn viewing_a_proposal_never_spends_actions() {
+    let (app, alice, src, url) = setup().await;
+    alice.patch(app.url("/api/projects/alice/house")).json(&json!({"visibility": "public"})).send().await.unwrap();
+    git_ok(src.path(), &["checkout", "-qb", "scheme-b"]).await;
+    write_record(src.path(), "objects/cd/1111111111111111111111.json", "{\"a\":{\"Name\":\"W-2\"},\"t\":\"IfcWall\"}");
+    git_ok(src.path(), &["add", "-A"]).await;
+    git_ok(src.path(), &["commit", "-qm", "two"]).await;
+    git_ok(src.path(), &["push", &url, "scheme-b"]).await;
+    alice.post(app.url("/api/projects/alice/house/proposals")).json(&json!({"title": "B", "source": "scheme-b", "target": "main"})).send().await.unwrap();
+    let before = wait_jobs(&app, "checks", 2).await.len();
+    sqlx::query("DELETE FROM jobs WHERE kind = 'checks'").execute(&app.db).await.unwrap();
+    let anon = reqwest::Client::new();
+    for _ in 0..3 {
+        assert_eq!(anon.get(app.url("/api/projects/alice/house/proposals/1")).send().await.unwrap().status(), 200);
+    }
+    assert_eq!(before, 2, "push to main and the proposal's source head each queue checks once");
+    assert!(jobs_of(&app, "checks").await.is_empty(), "a page view queued an Action");
+}
