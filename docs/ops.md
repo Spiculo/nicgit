@@ -4,7 +4,7 @@
 
 | Piece | What it does | Size it by |
 |---|---|---|
-| `server` (Rust) | web app, API, git push/pull, permissions, metering | small: measured 23 MB working set after serving the demo (Windows, debug build); CPU mostly git packing during clones |
+| `server` (Rust) | web app, API, git push/pull, permissions, metering | small: the release image is 196 MB and idles at ~4 MiB RAM (measured); CPU mostly git packing during clones |
 | `worker` (Python, KimBim engine) | diffs, merges, IFC export, imports, checks | **this is where memory and CPU go.** ~85 MB idle (measured); each worker runs one job at a time and holds one model in memory |
 | `db` (Postgres 16) | accounts, projects, proposals, issues, jobs, usage | small |
 | `data` volume | `repos/` (bare git repositories), `cache/` (IFC exports, .kim exports), `uploads/` | grows with history; back it up |
