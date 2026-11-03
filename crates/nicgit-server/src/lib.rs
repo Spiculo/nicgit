@@ -2,6 +2,7 @@
 //! NicGit server: accounts, projects, git hosting and the forge API around KimBim projects.
 pub mod access;
 pub mod activity;
+pub mod ai;
 pub mod api;
 pub mod app;
 pub mod audit;

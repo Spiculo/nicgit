@@ -14,4 +14,8 @@ TOKEN=$(curl -sf -b $J -H 'content-type: application/json' -d '{"name":"seed"}' 
 here="$(cd "$(dirname "$0")/.." && pwd)"
 fx="${KIMBIM_HOME:-$here/../kimcad}/build/m5/project/.git"
 git --git-dir="$fx" -c credential.helper= push "http://ana:$TOKEN@${U#http://}/studio/sample-house.git" 'refs/heads/*:refs/heads/*'
+# main goes back to before KimBim combined Scheme B, so the proposal below has a real conflict to settle.
+before=$(git --git-dir="$fx" rev-parse 'main^1')
+git --git-dir="$fx" -c credential.helper= push --force "http://ana:$TOKEN@${U#http://}/studio/sample-house.git" "$before:refs/heads/main"
+curl -s -b $J -H 'content-type: application/json' -d '{"title":"Glazed south wall and moved column","body":"Scheme B glazes the south wall and moves the column 300 mm east.","source":"Scheme%20B","target":"main"}' $U/api/projects/studio/sample-house/proposals >/dev/null
 echo "seeded: sign in as ana / correct horse battery"
