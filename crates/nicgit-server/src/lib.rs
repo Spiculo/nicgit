@@ -11,6 +11,7 @@ pub mod db;
 pub mod error;
 pub mod events;
 pub mod git;
+pub mod gitread;
 pub mod jobs;
 pub mod metering;
 pub mod notify;
