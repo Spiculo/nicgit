@@ -5,7 +5,8 @@ use axum::Router;
 
 pub mod auth;
 pub mod orgs;
+pub mod projects;
 
 pub fn router() -> Router<AppState> {
-    Router::new().merge(auth::router()).merge(orgs::router())
+    Router::new().merge(auth::router()).merge(orgs::router()).merge(projects::router())
 }
