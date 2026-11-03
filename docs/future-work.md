@@ -29,6 +29,14 @@ Move into `kimbim-repo`, in order of server benefit: content digests, `diff_deta
 
 `Project` assumes a project folder. Add read, diff and merge on a bare repository (or a worktree over it, cf. D111 `Repo::open_worktree`), plus a Combine API that accepts whole-side resolutions and settings-key resolutions.
 
+## Settings resolutions in the engine (kimcad)
+
+`Project.merge` keeps the target's value for every settings conflict. NicGit's worker repeats the merge's last steps to apply "take the source" for chosen keys (decision N18). Accept `settings_resolutions` in `merge_preview`/`merge` and drop the worker's copy.
+
+## A slim engine environment (kimcad)
+
+The worker image uses kimcad's whole default pixi environment (Qt, CMake, compilers included). An `engine` environment with only Python, IfcOpenShell, the Rust core and the check dependencies would cut the image and start-up time a lot.
+
 ## Settings schema (kimcad)
 
 A declared schema of `settings.json` keys (type, label EN/ES, "affects deliverables" flag), so NicGit can show settings diffs in plain language and derive the protected keys list instead of hard-coding it.
@@ -44,6 +52,18 @@ Hosting for NicBim packages: parametric objects (`.kimobj`), office libraries, I
 ## Actions beyond checks
 
 Customer workflows defined in the project (file location inside the tree to be agreed with the engine's layout rules): clash runs, exports, quantity reports, scripts. Runner isolation stronger than containers (gVisor/Firecracker) before running customer code on the hosted service.
+
+## Not built yet in NicGit (from the spec)
+
+- **Ask the model**: questions about a version answered with the engine's read-only agent tools (needs an inventory job and tool calls through the router).
+- **AI version summaries** on the timeline (the proposal summary exists; versions show the engine's counts).
+- **Postgres row-level security** as a second wall behind the per-route checks (the per-route checks and the isolation test exist).
+- **Object storage (S3)** for caches and exports; today they live on the data volume.
+- **Live job progress over websockets**; the web app polls every second.
+- **Large models in the browser**: per-version geometry is the full IFC parsed by web-ifc in the browser. Server-side conversion to a streaming format (fragments/glTF per element, reused across versions by content) is the next step for 50k+ element models.
+- **2FA (TOTP)** and **teams UI** (teams exist in the schema and in permissions, not in the API/UI yet).
+- **Notifications by email** and **webhooks**.
+- **Comments pinned in 3D** on proposals: comments accept a pin (elements, viewpoint) through the API; the web app does not place them yet.
 
 ## Platform
 
