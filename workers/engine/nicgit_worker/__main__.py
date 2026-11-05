@@ -1,90 +1,56 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""`python -m nicgit_worker`: claim jobs from a NicGit server and run them with the KimBim engine.
+"""`python -m nicgit_worker`: the supervisor. It claims jobs from a NicGit server and runs each in a new process.
 
 Environment: NICGIT_URL (default http://127.0.0.1:3000), NICGIT_WORKER_TOKEN (required).
-Run one worker process per CPU you want to give the engine; each runs one job at a time.
-"""
+Run one worker per CPU you want to give the engine; each runs one job at a time.
+
+The supervisor holds the pool token, which can claim any customer's job, so it never touches engine code or
+job files. The job's process gets neither the token nor a way to read it from this one (decision N30)."""
 from __future__ import annotations
 
 import argparse
 import json
 import logging
-import threading
 import os
-import pathlib
+import subprocess
+import sys
 import time
-import traceback
 import urllib.error
-import urllib.request
-
-from . import handlers
 
 log = logging.getLogger("nicgit_worker")
 
-
-class Client:
-    def __init__(self, url: str, token: str):
-        self.url, self.token = url.rstrip("/"), token
-
-    def _post(self, path: str, body: dict):
-        req = urllib.request.Request(self.url + path, data=json.dumps(body).encode(), method="POST",
-                                     headers={"content-type": "application/json", "x-worker-token": self.token})
-        with urllib.request.urlopen(req, timeout=60) as r:
-            data = r.read()
-            return r.status, (json.loads(data) if data else None)
-
-    def claim(self, kinds: list[str]):
-        status, job = self._post("/internal/jobs/claim", {"kinds": kinds})
-        return job if status == 200 else None
-
-    def progress(self, job_id: str, fraction: float):
-        try:
-            self._post(f"/internal/jobs/{job_id}/progress", {"progress": fraction})
-        except (urllib.error.URLError, OSError):
-            pass
-
-    def finish(self, job_id: str, *, result=None, error=None):
-        self._post(f"/internal/jobs/{job_id}/finish", {"result": result} if error is None else {"error": error})
+CHILD = [sys.executable, "-m", "nicgit_worker.child"]
+KINDS = ["checks", "combine", "compare", "element_history", "export_ifc", "export_kim", "import_ifc", "import_kim",
+         "merge_preview", "settings_diff", "summary"]
 
 
-HEARTBEAT_SECONDS = 60.0
+def lock_down() -> bool:
+    """Linux: stop a same-user process reading this one's memory or environment through /proc or ptrace.
+    An exec resets this, so jobs are unaffected. Elsewhere there is nothing to do; production is Linux."""
+    if not sys.platform.startswith("linux"):
+        return False
+    import ctypes
+
+    pr_set_dumpable = 4
+    return ctypes.CDLL(None, use_errno=True).prctl(pr_set_dumpable, 0, 0, 0, 0) == 0
 
 
-def run_one(client: Client, job: dict, heartbeat: float = HEARTBEAT_SECONDS) -> None:
-    last = {"fraction": 0.0}
+def child_env(env) -> dict:
+    return {k: v for k, v in env.items() if k != "NICGIT_WORKER_TOKEN"}
 
-    def report(fraction: float) -> None:
-        last["fraction"] = fraction
-        client.progress(job["id"], fraction)
 
-    ctx = handlers.Context(cache_dir=pathlib.Path(job["cache_dir"]), progress=report)
-    ctx.uploads_dir = pathlib.Path(job.get("uploads_dir") or ".")
-    started = time.monotonic()
-    # Report regularly however long the job takes: the server hands out again only jobs that go silent.
-    stop = threading.Event()
+def run_in_child(url: str, job: dict) -> None:
+    done = subprocess.run(CHILD, input=json.dumps({"url": url, "job": job}).encode(), env=child_env(os.environ), check=False)
+    if done.returncode == 0:
+        return
+    # It died before it could say so (out of memory, a crash in native code). Its token is still good.
+    log.error("%s %s: its process ended with %s", job["kind"], job["id"], done.returncode)
+    from .client import JobClient
 
-    def beat() -> None:
-        while not stop.wait(heartbeat):
-            client.progress(job["id"], last["fraction"])
-
-    beater = threading.Thread(target=beat, daemon=True)
-    beater.start()
     try:
-        result = handlers.run(job["kind"], pathlib.Path(job["repo"]), job["args"], ctx)
-        result = json.loads(json.dumps(result, default=str))
-        if isinstance(result, dict):
-            result.setdefault("_seconds", round(time.monotonic() - started, 3))
-        client.finish(job["id"], result=result)
-        log.info("%s %s done in %.1fs", job["kind"], job["id"], time.monotonic() - started)
-    except handlers.JobError as e:
-        client.finish(job["id"], error=str(e))
-        log.info("%s %s failed: %s", job["kind"], job["id"], e)
-    except Exception as e:  # noqa: BLE001 (report every failure to the server; keep serving)
-        log.error("%s %s crashed:\n%s", job["kind"], job["id"], traceback.format_exc())
-        client.finish(job["id"], error=f"internal error in the engine worker: {type(e).__name__}")
-    finally:
-        stop.set()
-        beater.join(timeout=5)
+        JobClient(url, job["id"], job["token"]).finish(error="the engine stopped unexpectedly while working on this")
+    except (urllib.error.URLError, OSError) as e:
+        log.warning("could not report it: %s", e)
 
 
 def main(argv=None) -> int:
@@ -93,13 +59,18 @@ def main(argv=None) -> int:
     ap.add_argument("--kinds", default=os.environ.get("NICGIT_WORKER_KINDS", ""), help="comma list (default: all)")
     ap.add_argument("--once", action="store_true", help="exit when no job is waiting")
     ap.add_argument("--idle", type=float, default=1.0, help="seconds to wait when the queue is empty")
+    ap.add_argument("--exit-if-unreachable", action="store_true",
+                    help="exit when the server goes away, rather than wait for it to return (for tests)")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     token = os.environ.get("NICGIT_WORKER_TOKEN")
     if not token:
         ap.error("NICGIT_WORKER_TOKEN is required")
-    kinds = [k for k in args.kinds.split(",") if k] or handlers.kinds()
-    client = Client(args.url, token)
+    lock_down()
+    from .client import PoolClient
+
+    kinds = [k for k in args.kinds.split(",") if k] or KINDS
+    client = PoolClient(args.url, token)
     log.info("serving %s for %s", ", ".join(kinds), args.url)
     while True:
         try:
@@ -107,10 +78,10 @@ def main(argv=None) -> int:
         except (urllib.error.URLError, OSError) as e:
             log.warning("server unreachable: %s", e)
             job = None
-            if args.once:
+            if args.once or args.exit_if_unreachable:
                 return 1
         if job:
-            run_one(client, job)
+            run_in_child(args.url, job)
             continue
         if args.once:
             return 0

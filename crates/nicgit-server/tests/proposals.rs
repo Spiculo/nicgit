@@ -207,7 +207,8 @@ async fn combine_whole_theirs_moves_target() {
             let script = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/engine-python.sh");
             tokio::process::Command::new("sh")
                 .arg(script)
-                .args(["-m", "nicgit_worker", "--url", &base, "--idle", "0.2"])
+                // Killing `sh` leaves the engine's process behind on Windows, holding this test's pipes open.
+                .args(["-m", "nicgit_worker", "--url", &base, "--idle", "0.2", "--exit-if-unreachable"])
                 .env("NICGIT_WORKER_TOKEN", common::WORKER_TOKEN)
                 .kill_on_drop(true)
                 .output()
@@ -233,5 +234,31 @@ async fn combine_whole_theirs_moves_target() {
     assert_eq!(d["proposal"]["state"], "combined");
     let main = git_ok(std::path::Path::new("."), &["ls-remote", &url, "refs/heads/main"]).await;
     assert!(main.starts_with(v["commit"].as_str().unwrap()), "{main} vs {v}");
+
+    // Golden: Combine through the job's temporary copy and push gives exactly the engine's own merge,
+    // made here on a private clone of the same two heads with the same choice.
+    let tmp = tempfile::tempdir().unwrap();
+    let store = tmp.path().join("p");
+    git_ok(tmp.path(), &["clone", "--bare", "-q", &fx, &store.join(".git").to_string_lossy()]).await;
+    git_ok(tmp.path(), &["--git-dir", &store.join(".git").to_string_lossy(), "update-ref", "refs/heads/main", &before_main]).await;
+    let code = "import pathlib, sys, tempfile\n\
+        from kimbim.project import Project\n\
+        work = pathlib.Path(tempfile.mkdtemp())\n\
+        (work / '.kimbim').mkdir()\n\
+        (work / '.kimbim' / 'HEAD').write_text('ref: refs/heads/main\\n')\n\
+        p = Project.open_worktree(pathlib.Path(sys.argv[1]), work)\n\
+        preview = p.merge_preview('Scheme%20B')\n\
+        picks = {c.to_dict()['id']: 'theirs' for c in preview.result.conflicts}\n\
+        print(p.merge('Scheme%20B', 'golden', picks, author=('T', 't@example.com'), time=0))\n";
+    let script = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/engine-python.sh");
+    let out = tokio::process::Command::new("sh").arg(script).args(["-c", code, &store.to_string_lossy()]).output().await.unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let engine_commit = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let tree_of = |git_dir: String, rev: String| async move { git_ok(std::path::Path::new("."), &["--git-dir", &git_dir, "rev-parse", &format!("{rev}^{{tree}}")]).await };
+    let expected = tree_of(store.join(".git").to_string_lossy().to_string(), engine_commit).await;
+    let id: uuid::Uuid = sqlx::query_scalar("SELECT id FROM projects WHERE slug = 'm5'").fetch_one(&app.db).await.unwrap();
+    let server_git = app.cfg.data_dir.join("repos").join(id.to_string()).join(".git");
+    let got = tree_of(server_git.to_string_lossy().to_string(), v["commit"].as_str().unwrap().to_string()).await;
+    assert_eq!(got, expected, "the server's Combine and the engine's merge must give the same tree");
     worker.abort();
 }

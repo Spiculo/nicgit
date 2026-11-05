@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: ${NICGIT_DB_PASSWORD:?set NICGIT_DB_PASSWORD}
       POSTGRES_DB: nicgit
     volumes: [db:/var/lib/postgresql/data]
-    networks: [internal]
+    networks: [db]
     healthcheck: { test: ["CMD-SHELL", "pg_isready -U nicgit"], interval: 5s, retries: 30 }
     restart: unless-stopped
 
@@ -24,17 +24,21 @@ services:
       NICGIT_DATABASE_URL: postgres://nicgit:${NICGIT_DB_PASSWORD}@db:5432/nicgit
       NICGIT_WORKER_TOKEN: ${NICGIT_WORKER_TOKEN:?set NICGIT_WORKER_TOKEN}
       NICGIT_PUBLIC_URL: ${NICGIT_PUBLIC_URL:-http://localhost:3000}
+      NICGIT_GOOGLE_CLIENT_ID: ${NICGIT_GOOGLE_CLIENT_ID:-}
+      NICGIT_GOOGLE_CLIENT_SECRET: ${NICGIT_GOOGLE_CLIENT_SECRET:-}
+      NICGIT_SITE_ADMIN_EMAIL: ${NICGIT_SITE_ADMIN_EMAIL:-}
       NICGIT_AI_ROUTER_URL: ${NICGIT_AI_ROUTER_URL:-}
       NICGIT_AI_ROUTER_KEY: ${NICGIT_AI_ROUTER_KEY:-}
       NICGIT_MAX_UPLOAD_MB: ${NICGIT_MAX_UPLOAD_MB:-2048}
     volumes: [data:/var/lib/nicgit/data]
     ports: ["${NICGIT_PORT:-3000}:3000"]
-    networks: [internal, public]
+    networks: [db, workers, public]
     depends_on: { db: { condition: service_healthy } }
     restart: unless-stopped
 
-  # Engine workers parse untrusted IFC/.kim files: no internet, no privileges, bounded memory.
-  # Size them for the models you host: a 100k-element model needs several GB while it is decomposed.
+  # Engine workers parse untrusted IFC/.kim files, so they get as little as possible (decision N30): no shared
+  # data, no database, no internet, no privileges, bounded memory. They reach only the server, and each job
+  # only its own project through it. Size them for the models you host: a 100k-element model needs several GB.
   worker:
     build:
       context: ..
@@ -43,8 +47,11 @@ services:
     environment:
       NICGIT_URL: http://server:3000
       NICGIT_WORKER_TOKEN: ${NICGIT_WORKER_TOKEN}
-    volumes: [data:/var/lib/nicgit/data]
-    networks: [internal]
+      TMPDIR: /work
+    # Each job's temporary copy. Removed after every job; the rest of the filesystem is read-only.
+    volumes: [/work]
+    read_only: true
+    networks: [workers]
     deploy:
       replicas: ${NICGIT_WORKERS:-2}
       resources: { limits: { memory: "${NICGIT_WORKER_MEMORY:-4g}", cpus: "1.0" } }
@@ -54,7 +61,8 @@ services:
     restart: unless-stopped
 
 networks:
-  internal: { internal: true }
+  db: { internal: true }
+  workers: { internal: true }
   public: {}
 
 volumes:

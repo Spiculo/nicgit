@@ -14,7 +14,8 @@ RUN pixi run -e default build
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/* \
- && useradd --system --home /var/lib/nicgit --create-home nicgit
+ && useradd --system --home /var/lib/nicgit --create-home nicgit \
+ && install -d -o nicgit -g nicgit /work
 COPY --from=build /kimcad/.pixi/envs/default /opt/engine
 COPY --from=build /kimcad/python /opt/kimcad/python
 COPY workers/engine/nicgit_worker /opt/nicgit/nicgit_worker
