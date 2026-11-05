@@ -72,6 +72,25 @@ impl TestApp {
         reqwest::Client::builder().cookie_provider(Arc::new(jar)).build().unwrap()
     }
 
+    /// Claim one job as a worker's supervisor would; panics if none of `kinds` is waiting.
+    pub async fn claim(&self, kinds: &[&str]) -> Value {
+        let r = reqwest::Client::new().post(self.url("/internal/jobs/claim")).header("x-worker-token", WORKER_TOKEN).json(&json!({"kinds": kinds})).send().await.unwrap();
+        assert_eq!(r.status(), 200, "no job of kind {kinds:?} waiting");
+        r.json().await.unwrap()
+    }
+
+    /// Finish a claimed job with its own token.
+    pub async fn finish(&self, job: &Value, body: Value) -> reqwest::StatusCode {
+        reqwest::Client::new()
+            .post(self.url(&format!("/internal/jobs/{}/finish", job["id"].as_str().unwrap())))
+            .bearer_auth(job["token"].as_str().unwrap())
+            .json(&body)
+            .send()
+            .await
+            .unwrap()
+            .status()
+    }
+
     /// A personal access token for a logged-in client.
     pub async fn token(&self, c: &reqwest::Client) -> String {
         let v: Value = c.post(self.url("/api/me/tokens")).json(&json!({"name": "git"})).send().await.unwrap().json().await.unwrap();

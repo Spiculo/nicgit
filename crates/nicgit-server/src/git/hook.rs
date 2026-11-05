@@ -60,6 +60,20 @@ pub fn check_ref(u: &Update, role: Role, protected: &[String]) -> Result<(), Str
     Ok(())
 }
 
+/// A job's limit on what it may push, from `NICGIT_JOB_REFS`: `exact:<ref>`, or `create` for new refs only.
+pub fn check_job_ref(u: &Update, rule: &str) -> Result<(), String> {
+    if rule == "create" {
+        if !is_zero(&u.old) || is_zero(&u.new) {
+            return Err(format!("this import can only add new refs, not change {}", u.name));
+        }
+        return Ok(());
+    }
+    if rule.strip_prefix("exact:") == Some(u.name.as_str()) {
+        return Ok(());
+    }
+    Err(format!("this job cannot change {}", u.name))
+}
+
 /// (path, blob id) of every blob that new commits added or changed.
 fn new_blobs(u: &Update) -> Result<Vec<(String, String)>, String> {
     if is_zero(&u.new) {
@@ -132,6 +146,7 @@ pub fn pre_receive() -> i32 {
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .collect();
+    let job_rule = std::env::var("NICGIT_JOB_REFS").ok();
     let stdin = std::io::stdin();
     let mut updates = Vec::new();
     for line in stdin.lock().lines().map_while(Result::ok) {
@@ -142,6 +157,10 @@ pub fn pre_receive() -> i32 {
     }
     let mut errors = Vec::new();
     for u in &updates {
+        if let Some(Err(e)) = job_rule.as_deref().map(|rule| check_job_ref(u, rule)) {
+            errors.push(e);
+            continue;
+        }
         if let Err(e) = check_ref(u, role, &protected) {
             errors.push(e);
             continue;

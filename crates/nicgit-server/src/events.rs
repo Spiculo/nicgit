@@ -41,14 +41,18 @@ pub async fn on_job_finished(
         return crate::actions::on_finished(state, &p, result).await;
     }
     let actor = args["by"].as_str().and_then(|s| Uuid::parse_str(s).ok());
+    // What an import did comes from the repository, not from the job's word.
+    let refs = crate::git::refs(&state.cfg.git, &crate::repos::git_dir(&state.cfg, project)).await.map_err(crate::error::AppError::internal)?;
+    let exists = |option: &str| refs.contains_key(&format!("refs/heads/{option}"));
     let heads: Vec<String> = match kind {
         "import_kim" => {
-            if let Some(default) = result["default"].as_str() {
+            if let Some(default) = result["default"].as_str().filter(|d| exists(d)) {
+                crate::repos::set_head(&state.cfg, project, default).await.map_err(crate::error::AppError::internal)?;
                 sqlx::query("UPDATE projects SET default_option = $2 WHERE id = $1").bind(project).bind(default).execute(&state.db).await?;
             }
-            result["heads"].as_object().map(|h| h.values().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default()
+            refs.iter().filter(|(name, _)| name.starts_with("refs/heads/")).map(|(_, id)| id.clone()).collect()
         }
-        _ => result["commit"].as_str().map(|c| vec![c.to_string()]).unwrap_or_default(),
+        _ => result["commit"].as_str().filter(|c| refs.values().any(|id| id == c)).map(|c| vec![c.to_string()]).unwrap_or_default(),
     };
     crate::activity::record(&state.db, project, actor, "project.imported", json!({"kind": kind, "options": result["options"]})).await?;
     for h in heads {

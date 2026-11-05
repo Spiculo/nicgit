@@ -172,7 +172,8 @@ async fn remove(State(state): State<AppState>, user: CurrentUser, Path((owner, s
     let (p, _) = access::load(&state, &owner, &slug, Some(user.id), Role::Admin).await?;
     sqlx::query("DELETE FROM projects WHERE id = $1").bind(p.id).execute(&state.db).await?;
     repos::remove_all(&p.repo_dir(&state))?;
-    repos::remove_all(&state.cfg.data_dir.join("cache").join(p.id.to_string()))?;
+    repos::remove_all(&repos::cache_dir(&state.cfg, p.id))?;
+    repos::remove_all(&repos::uploads_dir(&state.cfg, p.id))?;
     audit::record(&state.db, Some(p.owner_id), Some(user.id), "project.delete", &p.full_name(), json!({})).await?;
     Ok(Json(json!({"ok": true})))
 }

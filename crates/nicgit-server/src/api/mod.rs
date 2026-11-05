@@ -9,6 +9,7 @@ pub mod google;
 pub mod inbox;
 pub mod internal;
 pub mod issues;
+pub mod job_files;
 pub mod jobs;
 pub mod milestones;
 pub mod orgs;
@@ -27,6 +28,7 @@ pub fn router(max_upload_mb: u64) -> Router<AppState> {
         .merge(projects::router())
         .merge(versions::router())
         .merge(internal::router())
+        .merge(job_files::router())
         .merge(jobs::router())
         .merge(views::router())
         .merge(proposals::router())

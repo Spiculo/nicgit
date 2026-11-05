@@ -67,6 +67,26 @@ pub async fn enqueue_summary(state: &AppState, project: &Project, commit: &str) 
     enqueue(&state.db, project.id, "summary", json!({"rev": commit}), Some(&key(project, "summary", &[commit]))).await
 }
 
+fn is_commit_id(s: &str) -> bool {
+    matches!(s.len(), 40 | 64) && s.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// What a job needs from its project's repository, the least that lets it work. History jobs (merges,
+/// element history, whole-project exports) need everything; a name instead of a commit id does too.
+pub fn fetch_plan(kind: &str, args: &Value) -> Value {
+    let wanted: Option<(Vec<&str>, u32)> = match kind {
+        "export_ifc" | "checks" => args["rev"].as_str().map(|r| (vec![r], 1)),
+        "summary" => args["rev"].as_str().map(|r| (vec![r], 2)),
+        "compare" | "settings_diff" => args["from"].as_str().zip(args["to"].as_str()).map(|(a, b)| (if a == b { vec![a] } else { vec![a, b] }, 1)),
+        "import_kim" => return json!({"mode": "none"}),
+        _ => None,
+    };
+    match wanted {
+        Some((commits, depth)) if commits.iter().all(|c| is_commit_id(c)) => json!({"mode": "commits", "commits": commits, "depth": depth}),
+        _ => json!({"mode": "full"}),
+    }
+}
+
 /// Wait for a job to finish, polling the database (used where the API answers synchronously, e.g. Combine).
 pub async fn wait(db: &PgPool, id: Uuid, timeout: std::time::Duration) -> ApiResult<JobState> {
     let start = std::time::Instant::now();

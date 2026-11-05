@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The internal API engine workers use to claim and finish jobs. Workers hold no database credentials:
-//! they only see the job, the project's repository and its cache folder.
+//! The internal API of engine workers. The pool token only claims jobs. Each claim returns a token for that
+//! one job, which is all a job can use: it reaches its own project's files over HTTP and nothing else, and
+//! it stops working when the job finishes or is handed out again (decision N30).
 use crate::{
     app::AppState,
     error::{ApiResult, AppError},
 };
 use axum::{
     extract::{FromRequestParts, Path, State},
-    http::{request::Parts, StatusCode},
+    http::{request::Parts, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::post,
     Json, Router,
@@ -24,7 +25,43 @@ pub fn router() -> Router<AppState> {
         .route("/internal/jobs/{id}/finish", post(finish))
 }
 
-/// A request from an engine worker (header `X-Worker-Token`).
+/// A job as seen by the requests made under its token.
+#[derive(Debug, Clone)]
+pub struct RunningJob {
+    pub id: Uuid,
+    pub project: Uuid,
+    pub kind: String,
+    pub args: Value,
+}
+
+impl RunningJob {
+    /// The refs this job may push, for the pre-receive hook, and the options protected while it does.
+    /// None: the job only reads.
+    pub fn push_rule(&self) -> Option<(String, Vec<String>)> {
+        let exact = |option: &str| Some((format!("exact:refs/heads/{option}"), vec![option.to_string()]));
+        match self.kind.as_str() {
+            "combine" => exact(self.args["target"].as_str()?),
+            "import_ifc" => exact(self.args["option"].as_str().unwrap_or("main")),
+            "import_kim" => Some(("create".to_string(), vec![])),
+            _ => None,
+        }
+    }
+}
+
+/// The job a request's bearer token belongs to. Unknown, finished and reclaimed all look the same.
+pub async fn authorize_job(state: &AppState, headers: &HeaderMap, id: Uuid) -> Result<RunningJob, AppError> {
+    let token = headers.get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|h| h.strip_prefix("Bearer ")).map(str::trim);
+    let Some(token) = token.filter(|t| !t.is_empty()) else { return Err(AppError::unauthorized()) };
+    let row: Option<(Uuid, String, Value)> = sqlx::query_as("SELECT project_id, kind, args FROM jobs WHERE id = $1 AND token_hash = $2 AND status = 'running'")
+        .bind(id)
+        .bind(crate::auth::sha256_hex(token))
+        .fetch_optional(&state.db)
+        .await?;
+    let (project, kind, args) = row.ok_or_else(AppError::unauthorized)?;
+    Ok(RunningJob { id, project, kind, args })
+}
+
+/// A request from an engine worker's supervisor (header `X-Worker-Token`): it may only claim jobs.
 pub struct Worker;
 
 impl FromRequestParts<AppState> for Worker {
@@ -51,8 +88,9 @@ struct Claim {
 const STALE_MINUTES: i32 = 10;
 
 async fn claim(State(state): State<AppState>, _w: Worker, Json(b): Json<Claim>) -> ApiResult<Response> {
+    let token = crate::auth::new_session_token();
     let row: Option<(Uuid, Uuid, String, Value)> = sqlx::query_as(
-        "UPDATE jobs SET status = 'running', started_at = now(), heartbeat_at = now(), attempts = attempts + 1, progress = 0 \
+        "UPDATE jobs SET status = 'running', started_at = now(), heartbeat_at = now(), attempts = attempts + 1, progress = 0, token_hash = $3 \
          WHERE id = (SELECT id FROM jobs WHERE kind = ANY($1) AND \
                        (status = 'queued' OR (status = 'running' AND coalesce(heartbeat_at, started_at) < now() - make_interval(mins => $2))) \
                      ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) \
@@ -60,17 +98,12 @@ async fn claim(State(state): State<AppState>, _w: Worker, Json(b): Json<Claim>) 
     )
     .bind(&b.kinds)
     .bind(STALE_MINUTES)
+    .bind(crate::auth::sha256_hex(&token))
     .fetch_optional(&state.db)
     .await?;
     let Some((id, project, kind, args)) = row else { return Ok(StatusCode::NO_CONTENT.into_response()) };
-    let repo = crate::repos::dir(&state.cfg, project);
-    let cache = state.cfg.data_dir.join("cache").join(project.to_string());
-    let uploads = state.cfg.data_dir.join("uploads");
-    Ok(Json(json!({
-        "id": id, "project": project, "kind": kind, "args": args,
-        "repo": repo.to_string_lossy(), "cache_dir": cache.to_string_lossy(), "uploads_dir": uploads.to_string_lossy(),
-    }))
-    .into_response())
+    let fetch = crate::jobs::fetch_plan(&kind, &args);
+    Ok(Json(json!({"id": id, "project": project, "kind": kind, "args": args, "token": token, "fetch": fetch})).into_response())
 }
 
 #[derive(Deserialize)]
@@ -78,7 +111,8 @@ struct Progress {
     progress: f32,
 }
 
-async fn progress(State(state): State<AppState>, _w: Worker, Path(id): Path<Uuid>, Json(b): Json<Progress>) -> ApiResult<Json<Value>> {
+async fn progress(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>, Json(b): Json<Progress>) -> ApiResult<Json<Value>> {
+    authorize_job(&state, &headers, id).await?;
     sqlx::query("UPDATE jobs SET progress = $2, heartbeat_at = now() WHERE id = $1 AND status = 'running'")
         .bind(id)
         .bind(b.progress.clamp(0.0, 1.0))
@@ -93,10 +127,28 @@ struct Finish {
     error: Option<String>,
 }
 
-async fn finish(State(state): State<AppState>, _w: Worker, Path(id): Path<Uuid>, Json(b): Json<Finish>) -> ApiResult<Json<Value>> {
+/// A combine's claim about what it did, checked against the repository.
+async fn verify_combine(state: &AppState, job: &RunningJob, result: Option<&Value>) -> Result<(), AppError> {
+    let Some(target) = job.args["target"].as_str() else { return Ok(()) };
+    let head = crate::git::run(&state.cfg.git, &crate::repos::git_dir(&state.cfg, job.project), &["rev-parse", "--verify", "-q", &format!("refs/heads/{target}")]).await.ok();
+    let claimed = result.and_then(|r| r["commit"].as_str());
+    if head.as_deref().map(str::trim) == claimed && claimed.is_some() {
+        return Ok(());
+    }
+    Err(AppError::bad_request("the engine's result does not match the design option's head"))
+}
+
+async fn finish(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>, Json(mut b): Json<Finish>) -> ApiResult<Json<Value>> {
+    let job = authorize_job(&state, &headers, id).await?;
+    if job.kind == "combine" && b.error.is_none() {
+        if let Err(e) = verify_combine(&state, &job, b.result.as_ref()).await {
+            b.error = Some(e.message);
+            b.result = None;
+        }
+    }
     let (status, progress) = if b.error.is_some() { ("failed", 0.0f32) } else { ("done", 1.0) };
     let row: Option<(Uuid, String, Value)> = sqlx::query_as(
-        "UPDATE jobs SET status = $2, result = $3, error = $4, progress = $5, finished_at = now() \
+        "UPDATE jobs SET status = $2, result = $3, error = $4, progress = $5, finished_at = now(), token_hash = NULL \
          WHERE id = $1 AND status = 'running' RETURNING project_id, kind, args",
     )
     .bind(id)
@@ -107,6 +159,12 @@ async fn finish(State(state): State<AppState>, _w: Worker, Path(id): Path<Uuid>,
     .fetch_optional(&state.db)
     .await?;
     let (project, kind, args) = row.ok_or_else(AppError::not_found)?;
+    // An upload is used once, whatever became of the import.
+    if matches!(kind.as_str(), "import_kim" | "import_ifc") {
+        if let Some(path) = args["upload"].as_str().and_then(|n| crate::repos::upload_path(&state.cfg, project, n)) {
+            let _ = tokio::fs::remove_file(path).await;
+        }
+    }
     crate::events::on_job_finished(&state, project, id, &kind, &args, b.result.as_ref(), b.error.as_deref()).await?;
     Ok(Json(json!({"ok": true})))
 }

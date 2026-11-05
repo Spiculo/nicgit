@@ -58,7 +58,7 @@ async fn import(State(state): State<AppState>, user: CurrentUser, mut form: Mult
                         return Err(AppError::bad_request("upload a .kim or .ifc file"));
                     };
                     let name = format!("{}.{kind}", Uuid::new_v4());
-                    let path = state.cfg.data_dir.join("uploads").join(&name);
+                    let path = crate::repos::incoming_dir(&state.cfg).join(&name);
                     saved = Some((path.clone(), kind.to_string(), original));
                     let mut file = tokio::fs::File::create(&path).await?;
                     let mut written = 0u64;
@@ -103,6 +103,10 @@ async fn import(State(state): State<AppState>, user: CurrentUser, mut form: Mult
         .fetch_one(&state.db)
         .await?;
     let upload = path.file_name().unwrap().to_string_lossy().to_string();
+    // The project exists now: the file moves under it, where only that project's job can reach it.
+    let stored = crate::repos::uploads_dir(&state.cfg, project.id);
+    tokio::fs::create_dir_all(&stored).await?;
+    tokio::fs::rename(&path, stored.join(&upload)).await?;
     let job = if kind == "kim" {
         jobs::enqueue(&state.db, project.id, "import_kim", json!({"upload": upload, "max_bytes": max.saturating_mul(20), "by": user.id}), None).await?
     } else {
@@ -155,13 +159,11 @@ async fn export(
     if !job.done() {
         return Ok(respond(job));
     }
-    let path = std::path::PathBuf::from(job.result.as_ref().and_then(|r| r["path"].as_str()).unwrap_or_default());
-    let cache = state.cfg.data_dir.join("cache").join(p.id.to_string());
-    let inside = path.canonicalize().ok().zip(cache.canonicalize().ok()).is_some_and(|(f, c)| f.starts_with(c));
-    if !inside {
+    let path = job.result.as_ref().and_then(|r| r["artifact"].as_str()).and_then(|a| crate::repos::artifact_path(&state.cfg, p.id, a)).filter(|f| f.is_file());
+    let Some(path) = path else {
         sqlx::query("UPDATE jobs SET status = 'failed', error = 'cache missing' WHERE id = $1").bind(job.id).execute(&state.db).await?;
         return Err(AppError::new(StatusCode::GONE, "expired", "the export expired; request it again"));
-    }
+    };
     let file = tokio::fs::File::open(&path).await?;
     let len = file.metadata().await?.len();
     if let Some(u) = &user {

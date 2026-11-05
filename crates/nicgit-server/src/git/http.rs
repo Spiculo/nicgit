@@ -2,6 +2,7 @@
 //! Git smart HTTP: `git upload-pack` / `git receive-pack --stateless-rpc` behind NicGit's auth.
 use crate::{
     access::{self, Project},
+    api::internal::{authorize_job, RunningJob},
     app::AppState,
     auth::MaybeUser,
     error::{ApiResult, AppError},
@@ -27,6 +28,9 @@ pub fn router() -> Router<AppState> {
         .route("/{owner}/{repo}/info/refs", get(info_refs))
         .route("/{owner}/{repo}/git-upload-pack", post(upload_pack))
         .route("/{owner}/{repo}/git-receive-pack", post(receive_pack))
+        .route("/internal/jobs/{id}/git/info/refs", get(job_info_refs))
+        .route("/internal/jobs/{id}/git/git-upload-pack", post(job_upload_pack))
+        .route("/internal/jobs/{id}/git/git-receive-pack", post(job_receive_pack))
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -95,8 +99,22 @@ async fn info_refs(
         Ok(ok) => ok,
         Err(r) => return r,
     };
+    advertise(&state, &project.repo_dir(&state).join(".git"), service, &headers, false).await
+}
+
+/// A job fetches single versions by commit id, which plain upload-pack only allows for branch tips.
+fn git_command(state: &AppState, service: Service, job: bool) -> tokio::process::Command {
     let mut cmd = tokio::process::Command::new(&state.cfg.git);
-    cmd.arg(&service.name()[4..]).args(["--stateless-rpc", "--advertise-refs"]).arg(project.repo_dir(&state).join(".git"));
+    if job && service == Service::Upload {
+        cmd.args(["-c", "uploadpack.allowReachableSHA1InWant=true"]);
+    }
+    cmd.arg(&service.name()[4..]);
+    cmd
+}
+
+async fn advertise(state: &AppState, git_dir: &std::path::Path, service: Service, headers: &HeaderMap, job: bool) -> Response {
+    let mut cmd = git_command(state, service, job);
+    cmd.args(["--stateless-rpc", "--advertise-refs"]).arg(git_dir);
     if let Some(p) = headers.get("git-protocol").and_then(|v| v.to_str().ok()) {
         cmd.env("GIT_PROTOCOL", p);
     }
@@ -137,12 +155,8 @@ async fn rpc(
 ) -> Result<Response, Response> {
     let (project, role) = authorize(&state, &user, &owner, &repo, service).await?;
     let git_dir = project.repo_dir(&state).join(".git");
-    let mut cmd = tokio::process::Command::new(&state.cfg.git);
-    cmd.arg(&service.name()[4..]).arg("--stateless-rpc").arg(&git_dir);
-    cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit()).kill_on_drop(true);
-    if let Some(p) = headers.get("git-protocol").and_then(|v| v.to_str().ok()) {
-        cmd.env("GIT_PROTOCOL", p);
-    }
+    let mut cmd = git_command(&state, service, false);
+    cmd.arg("--stateless-rpc").arg(&git_dir);
     let before = if service == Service::Receive {
         let protected = crate::rules::protected_options(&state.db, project.id).await.map_err(|e| e.into_response())?;
         cmd.env("NICGIT_ROLE", role.as_str())
@@ -152,6 +166,33 @@ async fn rpc(
     } else {
         None
     };
+    let (mut child, response) = start_rpc(cmd, service, &headers, body)?;
+
+    // After the process ends, record what the push changed.
+    if let Some(before) = before {
+        let user_id = user.0.as_ref().map(|u| u.id);
+        let state2 = state.clone();
+        let project2 = project.clone();
+        tokio::spawn(async move {
+            match child.wait().await {
+                Ok(_) => after_push(&state2, &project2, user_id, before, &git_dir).await,
+                Err(e) => tracing::warn!("receive-pack: {e}"),
+            }
+        });
+    } else {
+        tokio::spawn(async move {
+            let _ = child.wait().await;
+        });
+    }
+    Ok(response)
+}
+
+/// Start git, feed it the request body and stream its output back.
+fn start_rpc(mut cmd: tokio::process::Command, service: Service, headers: &HeaderMap, body: Body) -> Result<(tokio::process::Child, Response), Response> {
+    cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit()).kill_on_drop(true);
+    if let Some(p) = headers.get("git-protocol").and_then(|v| v.to_str().ok()) {
+        cmd.env("GIT_PROTOCOL", p);
+    }
     let mut child = cmd.spawn().map_err(|e| AppError::internal(e).into_response())?;
     let mut stdin = child.stdin.take().expect("piped");
     let stdout = child.stdout.take().expect("piped");
@@ -171,26 +212,68 @@ async fn rpc(
         }
         let _ = stdin.shutdown().await;
     });
-
-    // After the process ends, record what the push changed.
-    if let Some(before) = before {
-        let user_id = user.0.as_ref().map(|u| u.id);
-        let state2 = state.clone();
-        let project2 = project.clone();
-        tokio::spawn(async move {
-            match child.wait().await {
-                Ok(_) => after_push(&state2, &project2, user_id, before, &git_dir).await,
-                Err(e) => tracing::warn!("receive-pack: {e}"),
-            }
-        });
-    } else {
-        tokio::spawn(async move {
-            let _ = child.wait().await;
-        });
-    }
     let content_type = format!("application/x-{}-result", service.name());
-    Ok(([(header::CONTENT_TYPE, content_type), (header::CACHE_CONTROL, "no-cache".to_string())], Body::from_stream(ReaderStream::new(stdout)))
-        .into_response())
+    let response = ([(header::CONTENT_TYPE, content_type), (header::CACHE_CONTROL, "no-cache".to_string())], Body::from_stream(ReaderStream::new(stdout))).into_response();
+    Ok((child, response))
+}
+
+// ---- engine jobs: the same transport under a job's token, for its own project only ----
+
+fn job_forbidden() -> Response {
+    AppError::new(StatusCode::FORBIDDEN, "forbidden", "this job only reads").into_response()
+}
+
+async fn job_info_refs(State(state): State<AppState>, Path(id): Path<Uuid>, Query(q): Query<ServiceQuery>, headers: HeaderMap) -> Response {
+    let job = match authorize_job(&state, &headers, id).await {
+        Ok(j) => j,
+        Err(e) => return e.into_response(),
+    };
+    let service = match q.service.as_str() {
+        "git-upload-pack" => Service::Upload,
+        "git-receive-pack" if job.push_rule().is_some() => Service::Receive,
+        "git-receive-pack" => return job_forbidden(),
+        _ => return AppError::bad_request("dumb HTTP is not supported").into_response(),
+    };
+    advertise(&state, &crate::repos::git_dir(&state.cfg, job.project), service, &headers, true).await
+}
+
+async fn job_upload_pack(State(state): State<AppState>, Path(id): Path<Uuid>, headers: HeaderMap, body: Body) -> Response {
+    let job = match authorize_job(&state, &headers, id).await {
+        Ok(j) => j,
+        Err(e) => return e.into_response(),
+    };
+    let mut cmd = git_command(&state, Service::Upload, true);
+    cmd.arg("--stateless-rpc").arg(crate::repos::git_dir(&state.cfg, job.project));
+    finish_job_rpc(cmd, Service::Upload, &headers, body)
+}
+
+async fn job_receive_pack(State(state): State<AppState>, Path(id): Path<Uuid>, headers: HeaderMap, body: Body) -> Response {
+    let job: RunningJob = match authorize_job(&state, &headers, id).await {
+        Ok(j) => j,
+        Err(e) => return e.into_response(),
+    };
+    let Some((rule, protected)) = job.push_rule() else { return job_forbidden() };
+    let mut cmd = git_command(&state, Service::Receive, true);
+    cmd.arg("--stateless-rpc").arg(crate::repos::git_dir(&state.cfg, job.project));
+    // The hook checks a job like a lead on a protected option, within the refs the job may touch.
+    cmd.env("NICGIT_ROLE", Role::Lead.as_str())
+        .env("NICGIT_PROTECTED", protected.join("\u{1f}"))
+        .env("NICGIT_GIT", &state.cfg.git)
+        .env("NICGIT_JOB_REFS", rule);
+    finish_job_rpc(cmd, Service::Receive, &headers, body)
+}
+
+/// A job's own flow records what it changed when it finishes, so nothing happens after the process.
+fn finish_job_rpc(cmd: tokio::process::Command, service: Service, headers: &HeaderMap, body: Body) -> Response {
+    match start_rpc(cmd, service, headers, body) {
+        Ok((mut child, response)) => {
+            tokio::spawn(async move {
+                let _ = child.wait().await;
+            });
+            response
+        }
+        Err(r) => r,
+    }
 }
 
 async fn after_push(state: &AppState, project: &Project, user: Option<Uuid>, before: super::RefMap, git_dir: &std::path::Path) {

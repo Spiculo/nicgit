@@ -13,6 +13,45 @@ pub fn git_dir(cfg: &Config, project: Uuid) -> PathBuf {
     dir(cfg, project).join(".git")
 }
 
+/// Everything cached for one project.
+pub fn cache_dir(cfg: &Config, project: Uuid) -> PathBuf {
+    cfg.data_dir.join("cache").join(project.to_string())
+}
+
+/// Uploaded files waiting for their import job, per project.
+pub fn uploads_dir(cfg: &Config, project: Uuid) -> PathBuf {
+    cfg.data_dir.join("uploads").join(project.to_string())
+}
+
+/// Files still arriving, before the project they will belong to exists.
+pub fn incoming_dir(cfg: &Config) -> PathBuf {
+    cfg.data_dir.join("uploads").join("incoming")
+}
+
+/// One plain file name: no separators, not hidden, nothing a filesystem could read as a path.
+fn plain_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 200
+        && !name.starts_with('.')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '%'))
+}
+
+pub fn upload_path(cfg: &Config, project: Uuid, name: &str) -> Option<PathBuf> {
+    plain_name(name).then(|| uploads_dir(cfg, project).join(name))
+}
+
+/// `<folder>/<name>` inside the project's cache. Job results name artifacts this way, and they are not trusted.
+pub fn artifact_path(cfg: &Config, project: Uuid, path: &str) -> Option<PathBuf> {
+    let (folder, name) = path.split_once('/')?;
+    (matches!(folder, "ifc" | "exports") && plain_name(name)).then(|| cache_dir(cfg, project).join(folder).join(name))
+}
+
+/// Point the repository's HEAD at a design option.
+pub async fn set_head(cfg: &Config, project: Uuid, option: &str) -> anyhow::Result<()> {
+    crate::git::run(&cfg.git, &git_dir(cfg, project), &["symbolic-ref", "HEAD", &format!("refs/heads/{option}")]).await?;
+    Ok(())
+}
+
 /// The pre-receive hook: git runs it with `sh`, on Windows too (Git for Windows).
 pub fn hook_script(hook_exe: &Path) -> String {
     let exe = hook_exe.to_string_lossy().replace('\\', "/");

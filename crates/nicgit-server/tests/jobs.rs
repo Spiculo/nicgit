@@ -52,18 +52,10 @@ async fn claim_finish_and_read() {
     let got: Value = claim(json!(["summary"])).await.unwrap().json().await.unwrap();
     assert_eq!(got["id"], job.id.to_string());
     assert_eq!(got["args"]["rev"], "abc");
-    assert!(got["repo"].as_str().unwrap().ends_with(&pid.to_string()));
-    assert!(got["cache_dir"].as_str().unwrap().contains(&pid.to_string()));
+    assert_eq!(got["project"], pid.to_string());
     // Claimed jobs are not handed out twice.
     assert_eq!(claim(json!(["summary"])).await.unwrap().status(), 204);
-    let r = w
-        .post(app.url(&format!("/internal/jobs/{}/finish", job.id)))
-        .header("x-worker-token", common::WORKER_TOKEN)
-        .json(&json!({"result": {"added": 3}}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(r.status(), 200);
+    assert_eq!(app.finish(&got, json!({"result": {"added": 3}})).await, 200);
     let seen: Value = alice.get(app.url(&format!("/api/jobs/{}", job.id))).send().await.unwrap().json().await.unwrap();
     assert_eq!(seen["status"], "done");
     assert_eq!(seen["result"]["added"], 3);
@@ -77,14 +69,8 @@ async fn failed_job_is_requeued_on_enqueue() {
     let alice = app.user("alice").await;
     let pid = project_id(&app, &alice).await;
     let job = jobs::enqueue(&app.db, pid, "summary", json!({}), Some("k2")).await.unwrap();
-    let w = reqwest::Client::new();
-    w.post(app.url("/internal/jobs/claim")).header("x-worker-token", common::WORKER_TOKEN).json(&json!({"kinds": ["summary"]})).send().await.unwrap();
-    w.post(app.url(&format!("/internal/jobs/{}/finish", job.id)))
-        .header("x-worker-token", common::WORKER_TOKEN)
-        .json(&json!({"error": "boom"}))
-        .send()
-        .await
-        .unwrap();
+    let claimed = app.claim(&["summary"]).await;
+    assert_eq!(app.finish(&claimed, json!({"error": "boom"})).await, 200);
     let again = jobs::enqueue(&app.db, pid, "summary", json!({}), Some("k2")).await.unwrap();
     assert_eq!(again.id, job.id);
     assert_eq!(again.status, "queued");
@@ -98,11 +84,11 @@ async fn long_job_with_heartbeat_is_not_handed_out_again() {
     let job = jobs::enqueue(&app.db, pid, "import_ifc", json!({}), None).await.unwrap();
     let w = reqwest::Client::new();
     let claim = || w.post(app.url("/internal/jobs/claim")).header("x-worker-token", common::WORKER_TOKEN).json(&json!({"kinds": ["import_ifc"]})).send();
-    assert_eq!(claim().await.unwrap().status(), 200);
+    let claimed: Value = claim().await.unwrap().json().await.unwrap();
     // Started an hour ago, but its worker reported progress a moment ago: still alive.
     sqlx::query("UPDATE jobs SET started_at = now() - interval '1 hour' WHERE id = $1").bind(job.id).execute(&app.db).await.unwrap();
     w.post(app.url(&format!("/internal/jobs/{}/progress", job.id)))
-        .header("x-worker-token", common::WORKER_TOKEN)
+        .bearer_auth(claimed["token"].as_str().unwrap())
         .json(&json!({"progress": 0.5}))
         .send()
         .await

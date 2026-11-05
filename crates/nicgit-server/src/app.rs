@@ -16,7 +16,7 @@ pub async fn build(cfg: Arc<Config>) -> anyhow::Result<(Router, AppState)> {
     let db = crate::db::connect(&cfg.database_url).await?;
     std::fs::create_dir_all(cfg.data_dir.join("repos"))?;
     std::fs::create_dir_all(cfg.data_dir.join("cache"))?;
-    std::fs::create_dir_all(cfg.data_dir.join("uploads"))?;
+    std::fs::create_dir_all(crate::repos::incoming_dir(&cfg))?;
     crate::api::google::sync_site_admin(&db, cfg.site_admin_email.as_deref()).await?;
     let state = AppState { db, cfg };
     let mut router = Router::new()

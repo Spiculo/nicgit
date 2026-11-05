@@ -71,23 +71,8 @@ async fn required_checks_block_combine() {
 async fn finished_checks_meter_action_seconds() {
     let (app, alice, _src, _url) = setup().await;
     wait_jobs(&app, "checks", 1).await;
-    let w = reqwest::Client::new();
-    let job: Value = w
-        .post(app.url("/internal/jobs/claim"))
-        .header("x-worker-token", common::WORKER_TOKEN)
-        .json(&json!({"kinds": ["checks"]}))
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    w.post(app.url(&format!("/internal/jobs/{}/finish", job["id"].as_str().unwrap())))
-        .header("x-worker-token", common::WORKER_TOKEN)
-        .json(&json!({"result": {"checks": [], "passed": true, "seconds": 3.2}}))
-        .send()
-        .await
-        .unwrap();
+    let job = app.claim(&["checks"]).await;
+    assert_eq!(app.finish(&job, json!({"result": {"checks": [], "passed": true, "seconds": 3.2}})).await, 200);
     let usage: Value = alice.get(app.url("/api/accounts/alice/usage")).send().await.unwrap().json().await.unwrap();
     let a = usage["usage"].as_array().unwrap().iter().find(|u| u["kind"] == "action_seconds").unwrap();
     assert_eq!(a["quantity"], 4);

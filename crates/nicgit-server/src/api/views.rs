@@ -98,15 +98,13 @@ async fn model_ifc(
     if !job.done() {
         return Ok(respond(job));
     }
-    let path = std::path::PathBuf::from(job.result.as_ref().and_then(|r| r["path"].as_str()).unwrap_or_default());
-    let cache = state.cfg.data_dir.join("cache").join(p.id.to_string());
-    let inside = path.canonicalize().ok().zip(cache.canonicalize().ok()).is_some_and(|(f, c)| f.starts_with(c));
-    if !inside {
+    let path = job.result.as_ref().and_then(|r| r["artifact"].as_str()).and_then(|a| crate::repos::artifact_path(&state.cfg, p.id, a)).filter(|f| f.is_file());
+    let Some(path) = path else {
         // The cache was cleared (or the result is not ours): export again.
         sqlx::query("UPDATE jobs SET status = 'failed', error = 'cache missing' WHERE id = $1").bind(job.id).execute(&state.db).await?;
         let job = jobs::enqueue(&state.db, p.id, "export_ifc", json!({"rev": commit}), Some(&jobs::key(&p, "export_ifc", &[&commit]))).await?;
         return Ok(respond(job));
-    }
+    };
     let file = tokio::fs::File::open(&path).await?;
     let len = file.metadata().await?.len();
     let name = format!("{}-{}.ifc", p.slug, &commit[..8]);
