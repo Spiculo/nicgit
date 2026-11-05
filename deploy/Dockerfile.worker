@@ -4,6 +4,8 @@
 # It uses kimcad's default pixi environment so the engine runs exactly as it is tested there. A slimmer
 # engine-only environment is future work (docs/future-work.md).
 FROM ghcr.io/prefix-dev/pixi:0.81.0 AS build
+# The engine's Rust extension links with the system's toolchain (cc, ar).
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
 WORKDIR /kimcad
 COPY --from=kimcad pixi.toml pixi.lock pyproject.toml Cargo.toml Cargo.lock ./
 COPY --from=kimcad tools/conda_pypi_map.json tools/conda_pypi_map.json

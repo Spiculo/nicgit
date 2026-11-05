@@ -19,7 +19,8 @@ RUN cargo build --release -p nicgit-server
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/* \
- && useradd --system --home /var/lib/nicgit --create-home nicgit
+ && useradd --system --home /var/lib/nicgit --create-home nicgit \
+ && install -d -o nicgit -g nicgit /var/lib/nicgit/data
 COPY --from=server /src/nicgit/target/release/nicgit-server /usr/local/bin/nicgit-server
 COPY --from=web /src/web/dist /usr/share/nicgit/web
 ENV NICGIT_BIND=0.0.0.0:3000 NICGIT_DATA_DIR=/var/lib/nicgit/data NICGIT_WEB_DIR=/usr/share/nicgit/web
