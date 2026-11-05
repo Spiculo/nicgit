@@ -15,12 +15,13 @@ COPY --from=kimcad python ./python
 RUN pixi run -e default build
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/* \
- && useradd --system --home /var/lib/nicgit --create-home nicgit \
+RUN useradd --system --home /var/lib/nicgit --create-home nicgit \
  && install -d -o nicgit -g nicgit /work
-COPY --from=build /kimcad/.pixi/envs/default /opt/engine
+# The same path it was built at: conda packages have their prefix compiled in. Moved, the environment's git
+# cannot find its HTTP helper, and every job fails to fetch. That git is the one jobs use.
+COPY --from=build /kimcad/.pixi/envs/default /kimcad/.pixi/envs/default
 COPY --from=build /kimcad/python /opt/kimcad/python
 COPY workers/engine/nicgit_worker /opt/nicgit/nicgit_worker
-ENV PATH=/opt/engine/bin:$PATH PYTHONPATH=/opt/kimcad/python:/opt/nicgit PYTHONDONTWRITEBYTECODE=1
+ENV PATH=/kimcad/.pixi/envs/default/bin:$PATH PYTHONPATH=/opt/kimcad/python:/opt/nicgit PYTHONDONTWRITEBYTECODE=1
 USER nicgit
 CMD ["python", "-m", "nicgit_worker"]
