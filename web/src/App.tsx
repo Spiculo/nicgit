@@ -3,7 +3,7 @@ import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { LangContext, browserLang, useT } from './i18n'
 import { useMe, api } from './lib/api'
 import { useQueryClient } from '@tanstack/react-query'
-import { Login, Signup } from './pages/Auth'
+import { Login } from './pages/Auth'
 import { Dashboard, Explore } from './pages/Dashboard'
 import { NewProject } from './pages/NewProject'
 import { ImportProject } from './pages/ImportProject'
@@ -21,7 +21,7 @@ export function App() {
       <TopBar />
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
+        <Route path="/signup" element={<Navigate to="/login" replace />} />
         <Route path="/" element={signedIn ? <Dashboard /> : <Navigate to="/login" replace />} />
         <Route path="/explore" element={<Explore />} />
         <Route path="/new" element={signedIn ? <NewProject /> : <Navigate to="/login" replace />} />

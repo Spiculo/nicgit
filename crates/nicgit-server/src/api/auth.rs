@@ -7,7 +7,6 @@ use crate::{
 };
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
     routing::{delete, get, post},
     Json, Router,
 };
@@ -20,29 +19,13 @@ use uuid::Uuid;
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/auth/signup", post(signup))
-        .route("/api/auth/login", post(login))
         .route("/api/auth/logout", post(logout))
         .route("/api/me", get(me).patch(update_me))
         .route("/api/me/tokens", get(list_tokens).post(create_token))
         .route("/api/me/tokens/{id}", delete(delete_token))
 }
 
-#[derive(Deserialize)]
-struct Signup {
-    slug: String,
-    email: String,
-    password: String,
-    #[serde(default)]
-    display_name: String,
-}
-
-fn valid_email(e: &str) -> bool {
-    let Some((local, domain)) = e.split_once('@') else { return false };
-    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !e.contains(char::is_whitespace)
-}
-
-async fn start_session(state: &AppState, jar: CookieJar, user: Uuid) -> ApiResult<CookieJar> {
+pub(crate) async fn start_session(state: &AppState, jar: CookieJar, user: Uuid) -> ApiResult<CookieJar> {
     let token = auth::new_session_token();
     sqlx::query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, now() + make_interval(days => $3))")
         .bind(auth::sha256_hex(&token))
@@ -58,84 +41,6 @@ async fn start_session(state: &AppState, jar: CookieJar, user: Uuid) -> ApiResul
         .max_age(Duration::days(auth::SESSION_DAYS))
         .build();
     Ok(jar.add(cookie))
-}
-
-async fn signup(State(state): State<AppState>, jar: CookieJar, Json(b): Json<Signup>) -> ApiResult<(CookieJar, Json<Value>)> {
-    let slug = b.slug.trim().to_string();
-    let email = b.email.trim().to_lowercase();
-    if !nicgit_core::names::valid_slug(&slug) {
-        return Err(AppError::bad_request("user names use lowercase letters, digits, '-', '_' or '.'"));
-    }
-    if !valid_email(&email) {
-        return Err(AppError::bad_request("enter a valid email address"));
-    }
-    if b.password.chars().count() < auth::MIN_PASSWORD {
-        return Err(AppError::bad_request(format!("passwords need at least {} characters", auth::MIN_PASSWORD)));
-    }
-    let hash = auth::hash_password(&b.password)?;
-    let id = Uuid::new_v4();
-    let mut tx = state.db.begin().await?;
-    let taken: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM accounts WHERE slug = $1) OR EXISTS (SELECT 1 FROM users WHERE email = $2)",
-    )
-    .bind(&slug)
-    .bind(&email)
-    .fetch_one(&mut *tx)
-    .await?;
-    if taken {
-        return Err(AppError::conflict("taken", "that user name or email is already in use"));
-    }
-    // The first user of an installation administers the site.
-    let first: bool = sqlx::query_scalar("SELECT NOT EXISTS (SELECT 1 FROM users)").fetch_one(&mut *tx).await?;
-    let display = if b.display_name.trim().is_empty() { slug.clone() } else { b.display_name.trim().to_string() };
-    sqlx::query("INSERT INTO accounts (id, kind, slug, display_name) VALUES ($1, 'user', $2, $3)")
-        .bind(id)
-        .bind(&slug)
-        .bind(&display)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("INSERT INTO users (account_id, email, password_hash, is_site_admin) VALUES ($1, $2, $3, $4)")
-        .bind(id)
-        .bind(&email)
-        .bind(&hash)
-        .bind(first)
-        .execute(&mut *tx)
-        .await?;
-    audit::record(&mut *tx, Some(id), Some(id), "user.signup", &slug, json!({})).await?;
-    tx.commit().await?;
-    let jar = start_session(&state, jar, id).await?;
-    Ok((jar, Json(json!({"id": id, "slug": slug}))))
-}
-
-#[derive(Deserialize)]
-struct Login {
-    login: String,
-    password: String,
-}
-
-async fn login(State(state): State<AppState>, jar: CookieJar, Json(b): Json<Login>) -> ApiResult<(CookieJar, Json<Value>)> {
-    let login = b.login.trim().to_lowercase();
-    let row: Option<(Uuid, String, String)> = sqlx::query_as(
-        "SELECT a.id, a.slug, u.password_hash FROM users u JOIN accounts a ON a.id = u.account_id \
-         WHERE a.slug = $1 OR u.email = $1",
-    )
-    .bind(&login)
-    .fetch_optional(&state.db)
-    .await?;
-    let ok = match &row {
-        Some((_, _, hash)) => auth::verify_password(&b.password, hash),
-        None => {
-            auth::verify_password(&b.password, &auth::DUMMY_HASH);
-            false
-        }
-    };
-    let Some((id, slug, _)) = row.filter(|_| ok) else {
-        audit::record(&state.db, None, None, "user.login_failed", &login, json!({})).await?;
-        return Err(AppError::new(StatusCode::UNAUTHORIZED, "bad_credentials", "wrong user name or password"));
-    };
-    audit::record(&state.db, Some(id), Some(id), "user.login", &slug, json!({})).await?;
-    let jar = start_session(&state, jar, id).await?;
-    Ok((jar, Json(json!({"id": id, "slug": slug}))))
 }
 
 async fn logout(State(state): State<AppState>, jar: CookieJar) -> ApiResult<(CookieJar, Json<Value>)> {

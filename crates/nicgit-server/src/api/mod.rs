@@ -5,6 +5,7 @@ use axum::Router;
 
 pub mod accounts;
 pub mod auth;
+pub mod google;
 pub mod inbox;
 pub mod internal;
 pub mod issues;
@@ -21,6 +22,7 @@ pub mod views;
 pub fn router(max_upload_mb: u64) -> Router<AppState> {
     Router::new()
         .merge(auth::router())
+        .merge(google::router())
         .merge(orgs::router())
         .merge(projects::router())
         .merge(versions::router())

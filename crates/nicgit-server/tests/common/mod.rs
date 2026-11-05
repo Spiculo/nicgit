@@ -3,13 +3,29 @@
 #![allow(dead_code)]
 pub mod engine;
 pub mod git;
-use nicgit_server::{config::Config, app};
+use nicgit_server::{app, auth::SESSION_COOKIE, config::Config, dev};
 use serde_json::{json, Value};
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::sync::Arc;
 
 pub const ADMIN_URL: &str = "postgres://nicgit:nicgit@127.0.0.1:5434/nicgit";
 pub const WORKER_TOKEN: &str = "test-worker-token";
+
+/// Test databases are dropped on a later run: a finished or crashed test cannot clean up after itself.
+/// Once per test process, and only those over an hour old, so parallel runs never lose theirs.
+async fn sweep_old_databases(admin: &mut PgConnection, now: u64) {
+    static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if DONE.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    let names: Vec<String> = sqlx::query_scalar("SELECT datname FROM pg_database WHERE starts_with(datname, 'nicgit_test_')").fetch_all(&mut *admin).await.unwrap_or_default();
+    for name in names {
+        let stamp = name.strip_prefix("nicgit_test_").and_then(|r| r.split_once('_')).and_then(|(s, _)| s.parse::<u64>().ok());
+        if stamp.is_none_or(|s| now.saturating_sub(s) > 3600) {
+            let _ = admin.execute(format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)").as_str()).await;
+        }
+    }
+}
 
 pub struct TestApp {
     pub base: String,
@@ -25,8 +41,10 @@ impl TestApp {
     }
 
     pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
-        let name = format!("nicgit_test_{}", uuid::Uuid::new_v4().simple());
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let name = format!("nicgit_test_{stamp}_{}", uuid::Uuid::new_v4().simple());
         let mut admin = PgConnection::connect(ADMIN_URL).await.expect("dev Postgres on 5434 (deploy/compose.dev.yaml)");
+        sweep_old_databases(&mut admin, stamp).await;
         admin.execute(format!("CREATE DATABASE {name}").as_str()).await.unwrap();
         let data = tempfile::tempdir().unwrap();
         let mut cfg = Config::for_tests(&format!("postgres://nicgit:nicgit@127.0.0.1:5434/{name}"), data.path(), WORKER_TOKEN);
@@ -45,17 +63,13 @@ impl TestApp {
         format!("{}{}", self.base, path)
     }
 
-    /// A fresh client (own cookie jar) signed up and logged in as `slug`.
+    /// A fresh client (own cookie jar) with a new account `slug`, signed in.
     pub async fn user(&self, slug: &str) -> reqwest::Client {
-        let c = reqwest::Client::builder().cookie_store(true).build().unwrap();
-        let r = c
-            .post(self.url("/api/auth/signup"))
-            .json(&json!({"slug": slug, "email": format!("{slug}@example.com"), "password": "correct horse battery"}))
-            .send()
-            .await
-            .unwrap();
-        assert!(r.status().is_success(), "signup {slug}: {}", r.text().await.unwrap());
-        c
+        let id = dev::create_user(&self.db, slug, &format!("{slug}@example.com"), slug).await.expect("create user");
+        let session = dev::new_session(&self.db, id).await.expect("new session");
+        let jar = reqwest::cookie::Jar::default();
+        jar.add_cookie_str(&format!("{SESSION_COOKIE}={session}"), &self.base.parse().unwrap());
+        reqwest::Client::builder().cookie_provider(Arc::new(jar)).build().unwrap()
     }
 
     /// A personal access token for a logged-in client.

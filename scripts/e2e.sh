@@ -25,4 +25,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 for i in $(seq 1 60); do curl -sf http://127.0.0.1:3100/api/health >/dev/null && break; sleep 1; done
+export NICGIT_E2E_USER="e2e$$"
+NICGIT_E2E_TOKEN="$(NICGIT_DEV=1 "$CARGO_TARGET_DIR/debug/nicgit-server" dev-user --slug "$NICGIT_E2E_USER" --email "$NICGIT_E2E_USER@example.com")"
+export NICGIT_E2E_TOKEN
 python scripts/e2e.py http://127.0.0.1:3100 "$kim/build/m5/project/.git"

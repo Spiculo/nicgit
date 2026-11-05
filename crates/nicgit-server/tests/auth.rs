@@ -3,63 +3,20 @@ mod common;
 use serde_json::{json, Value};
 
 #[tokio::test]
-async fn signup_login_me() {
+async fn session_me_and_logout() {
     let app = common::TestApp::spawn().await;
     let alice = app.user("alice").await;
     let me: Value = alice.get(app.url("/api/me")).send().await.unwrap().json().await.unwrap();
     assert_eq!(me["slug"], "alice");
-    assert!(me.get("password_hash").is_none());
+    assert!(me.get("google_sub").is_none());
 
-    let fresh = reqwest::Client::builder().cookie_store(true).build().unwrap();
+    let fresh = reqwest::Client::new();
     assert_eq!(fresh.get(app.url("/api/me")).send().await.unwrap().status(), 401);
-    let r = fresh
-        .post(app.url("/api/auth/login"))
-        .json(&json!({"login": "alice@example.com", "password": "correct horse battery"}))
-        .send()
-        .await
-        .unwrap();
+
+    let r = alice.post(app.url("/api/auth/logout")).send().await.unwrap();
     assert_eq!(r.status(), 200);
-    let me: Value = fresh.get(app.url("/api/me")).send().await.unwrap().json().await.unwrap();
-    assert_eq!(me["slug"], "alice");
-
-    fresh.post(app.url("/api/auth/logout")).send().await.unwrap();
-    assert_eq!(fresh.get(app.url("/api/me")).send().await.unwrap().status(), 401);
-}
-
-#[tokio::test]
-async fn signup_rejects_bad_input() {
-    let app = common::TestApp::spawn().await;
-    let c = reqwest::Client::new();
-    let bad = [
-        json!({"slug": "api", "email": "a@b.c", "password": "correct horse battery"}),
-        json!({"slug": "bob", "email": "nope", "password": "correct horse battery"}),
-        json!({"slug": "bob", "email": "a@b.c", "password": "short"}),
-    ];
-    for body in bad {
-        let r = c.post(app.url("/api/auth/signup")).json(&body).send().await.unwrap();
-        assert_eq!(r.status(), 400, "{body}");
-    }
-    app.user("bob").await;
-    let r = c
-        .post(app.url("/api/auth/signup"))
-        .json(&json!({"slug": "bob", "email": "other@example.com", "password": "correct horse battery"}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(r.status(), 409);
-}
-
-#[tokio::test]
-async fn wrong_password_401() {
-    let app = common::TestApp::spawn().await;
-    app.user("alice").await;
-    let r = reqwest::Client::new()
-        .post(app.url("/api/auth/login"))
-        .json(&json!({"login": "alice", "password": "wrong password!!"}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(r.status(), 401);
+    let sessions: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions").fetch_one(&app.db).await.unwrap();
+    assert_eq!(sessions, 0, "the session is gone on the server, not just the cookie");
 }
 
 #[tokio::test]
@@ -108,25 +65,18 @@ async fn non_admin_cannot_add_member() {
     let app = common::TestApp::spawn().await;
     let alice = app.user("alice").await;
     let bob = app.user("bob").await;
-    app.user("carol").await;
+    let carol = app.user("carol").await;
     alice.post(app.url("/api/orgs")).json(&json!({"slug": "studio"})).send().await.unwrap();
     alice.put(app.url("/api/orgs/studio/members/bob")).json(&json!({"role": "member"})).send().await.unwrap();
     let r = bob.put(app.url("/api/orgs/studio/members/carol")).json(&json!({"role": "member"})).send().await.unwrap();
     assert_eq!(r.status(), 403);
     // A stranger does not even learn the members.
-    let carol = reqwest::Client::builder().cookie_store(true).build().unwrap();
-    carol
-        .post(app.url("/api/auth/login"))
-        .json(&json!({"login": "carol", "password": "correct horse battery"}))
-        .send()
-        .await
-        .unwrap();
     let org: Value = carol.get(app.url("/api/orgs/studio")).send().await.unwrap().json().await.unwrap();
     assert!(org.get("members").is_none() || org["members"].as_array().unwrap().is_empty());
 }
 
 #[tokio::test]
-async fn signup_writes_audit() {
+async fn new_user_writes_audit() {
     let app = common::TestApp::spawn().await;
     app.user("alice").await;
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM audit_log WHERE action = 'user.signup'")

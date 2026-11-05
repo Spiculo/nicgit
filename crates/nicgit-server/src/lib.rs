@@ -11,6 +11,7 @@ pub mod auth;
 pub mod bcf;
 pub mod config;
 pub mod db;
+pub mod dev;
 pub mod error;
 pub mod events;
 pub mod git;

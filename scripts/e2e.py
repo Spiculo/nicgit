@@ -3,30 +3,28 @@
 
     python scripts/e2e.py http://127.0.0.1:3100 ../kimcad/build/m5/project/.git
 
-Signs up a user, creates a project, pushes KimBim's M5 project with main set back before its combine,
+Uses the account in NICGIT_E2E_USER and NICGIT_E2E_TOKEN (scripts/e2e.sh makes them), creates a project, pushes KimBim's M5 project with main set back before its combine,
 waits for the engine's summaries, compares the options, opens a proposal, combines it taking the source
 option's side of every conflict, and checks the result equals what the engine's own merge gives.
 """
-import http.cookiejar
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.error
 import urllib.request
-import uuid
 
 BASE, FIXTURE = sys.argv[1].rstrip("/"), sys.argv[2]
-jar = http.cookiejar.CookieJar()
-opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+user, token = os.environ["NICGIT_E2E_USER"], os.environ["NICGIT_E2E_TOKEN"]
 
 
 def call(method, path, body=None, ok=(200,)):
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(BASE + path, data=data, method=method, headers={"content-type": "application/json"})
+    req = urllib.request.Request(BASE + path, data=data, method=method, headers={"content-type": "application/json", "authorization": f"Bearer {token}"})
     try:
-        with opener.open(req, timeout=900) as r:
+        with urllib.request.urlopen(req, timeout=900) as r:
             status, raw = r.status, r.read()
     except urllib.error.HTTPError as e:
         status, raw = e.code, e.read()
@@ -53,12 +51,9 @@ def step(msg):
     print(f"- {msg}", flush=True)
 
 
-user = f"e2e{uuid.uuid4().hex[:8]}"
-step(f"sign up {user}")
-call("POST", "/api/auth/signup", {"slug": user, "email": f"{user}@example.com", "password": "correct horse battery"})
-_, tok = call("POST", "/api/me/tokens", {"name": "e2e"})
+step(f"signed in as {user}")
 call("POST", "/api/projects", {"owner": user, "slug": "m5", "visibility": "private"})
-remote = BASE.replace("://", f"://{user}:{tok['token']}@") + f"/{user}/m5.git"
+remote = BASE.replace("://", f"://{user}:{token}@") + f"/{user}/m5.git"
 
 step("push the M5 project (main before its combine)")
 git("--git-dir", FIXTURE, "push", remote, "refs/heads/*:refs/heads/*")
@@ -81,9 +76,9 @@ assert cmp["details"], cmp
 print(f"  {len(cmp['details'])} elements differ")
 
 step("the version as IFC")
-req = urllib.request.Request(BASE + f"/api/projects/{user}/m5/versions/main/model.ifc")
+req = urllib.request.Request(BASE + f"/api/projects/{user}/m5/versions/main/model.ifc", headers={"authorization": f"Bearer {token}"})
 for _ in range(300):
-    with opener.open(req) as r:
+    with urllib.request.urlopen(req) as r:
         if r.status == 200:
             assert r.read(12) == b"ISO-10303-21"
             break

@@ -1,21 +1,21 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Demo data on a running dev server: user "ana" (password "correct horse battery"), org "studio",
-# project studio/sample-house with KimBim's M5 project (two design options) pushed to it.
+# Demo data on a running dev server: user "ana", org "studio", project studio/sample-house with KimBim's M5
+# project (two design options) pushed to it. The account comes from `nicgit-server dev-user`, without Google.
 set -e
 U="${NICGIT_URL:-http://127.0.0.1:3000}"
-J=/tmp/nicgit-seed-cookies
-rm -f $J
-curl -sf -c $J -H 'content-type: application/json' -d '{"slug":"ana","email":"ana@example.com","password":"correct horse battery","display_name":"Ana Ferreira"}' $U/api/auth/signup >/dev/null \
-  || curl -sf -c $J -H 'content-type: application/json' -d '{"login":"ana","password":"correct horse battery"}' $U/api/auth/login >/dev/null
-curl -s -b $J -H 'content-type: application/json' -d '{"slug":"studio","display_name":"Studio Ferreira"}' $U/api/orgs >/dev/null
-curl -s -b $J -H 'content-type: application/json' -d '{"owner":"studio","slug":"sample-house","description":"Two-storey sample house with two schemes"}' $U/api/projects >/dev/null
-TOKEN=$(curl -sf -b $J -H 'content-type: application/json' -d '{"name":"seed"}' $U/api/me/tokens | sed 's/.*"token":"\([^"]*\)".*/\1/')
 here="$(cd "$(dirname "$0")/.." && pwd)"
+bin="${NICGIT_SERVER_BIN:-$here/target/dev/debug/nicgit-server}"
+user() { NICGIT_DEV=1 "$bin" dev-user --slug ana --email ana@example.com --name "Ana Ferreira" "$@"; }
+TOKEN=$(user)
+post() { curl -s -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d "$2" "$U$1" >/dev/null; }
+post /api/orgs '{"slug":"studio","display_name":"Studio Ferreira"}'
+post /api/projects '{"owner":"studio","slug":"sample-house","description":"Two-storey sample house with two schemes"}'
 fx="${KIMBIM_HOME:-$here/../kimcad}/build/m5/project/.git"
 git --git-dir="$fx" -c credential.helper= push "http://ana:$TOKEN@${U#http://}/studio/sample-house.git" 'refs/heads/*:refs/heads/*'
 # main goes back to before KimBim combined Scheme B, so the proposal below has a real conflict to settle.
 before=$(git --git-dir="$fx" rev-parse 'main^1')
 git --git-dir="$fx" -c credential.helper= push --force "http://ana:$TOKEN@${U#http://}/studio/sample-house.git" "$before:refs/heads/main"
-curl -s -b $J -H 'content-type: application/json' -d '{"title":"Glazed south wall and moved column","body":"Scheme B glazes the south wall and moves the column 300 mm east.","source":"Scheme%20B","target":"main"}' $U/api/projects/studio/sample-house/proposals >/dev/null
-echo "seeded: sign in as ana / correct horse battery"
+post /api/projects/studio/sample-house/proposals '{"title":"Glazed south wall and moved column","body":"Scheme B glazes the south wall and moves the column 300 mm east.","source":"Scheme%20B","target":"main"}'
+echo "seeded. To look around as ana without Google, set this cookie in your browser:"
+echo "  nicgit_session=$(user --session)"
