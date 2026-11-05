@@ -84,10 +84,7 @@ async fn create(State(state): State<AppState>, user: CurrentUser, Path((owner, s
     if exists || git.tags().await?.iter().any(|t| t["name"] == b.tag.as_str()) {
         return Err(AppError::conflict("taken", "a milestone with that name already exists"));
     }
-    let (name, email): (String, String) = sqlx::query_as("SELECT a.display_name, u.email FROM users u JOIN accounts a ON a.id = u.account_id WHERE u.account_id = $1")
-        .bind(user.id)
-        .fetch_one(&state.db)
-        .await?;
+    let (name, email) = crate::auth::commit_identity(&state.db, user.id).await?;
     let message = if b.notes.trim().is_empty() { title.to_string() } else { format!("{title}\n\n{}", b.notes.trim()) };
     let out = tokio::process::Command::new(&state.cfg.git)
         .arg("--git-dir")

@@ -73,7 +73,7 @@ def unwritable(path):
     except OSError:
         return True
 
-check("the server is reachable", connects("server", 3000))
+check("the server's workers address is reachable", connects("server", 3001))
 check("no shared data folder", not pathlib.Path("/var/lib/nicgit/data").exists())
 check("the database is not reachable", not connects("db", 5432))
 check("the internet is not reachable", not connects("1.1.1.1", 443))
@@ -87,6 +87,19 @@ check("the supervisor's memory is not readable", unreadable("/proc/1/mem"))
 sys.exit(1 if failures else 0)
 EOF
 
+echo "== the workers' API, from outside"
+code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "X-Worker-Token: stack-check-pool-$$" -H 'Content-Type: application/json' -d '{"kinds":[]}' "http://localhost:$port/internal/jobs/claim")"
+case "$code" in
+  404|405) echo "  ok    not on the public port ($code)" ;;
+  *) echo "  FAIL  the public port answered $code"; exit 1 ;;
+esac
+
+echo "== something a job leaves behind, to see it gone after the next job"
+for w in $(dc ps -q worker); do
+  docker exec -d "$w" sleep 3000
+  docker exec "$w" sh -c 'echo x > /work/left-by-a-job; echo x > /dev/shm/left-by-a-job'
+done
+
 echo "== the whole flow, through the containers"
 NICGIT_E2E_USER="stack$$"
 NICGIT_E2E_TOKEN="$(dc exec -T -e NICGIT_DEV=1 server nicgit-server dev-user --slug "$NICGIT_E2E_USER" --email "$NICGIT_E2E_USER@example.com" | tr -d '\r')"
@@ -94,11 +107,20 @@ export NICGIT_E2E_USER NICGIT_E2E_TOKEN
 python scripts/e2e.py "http://localhost:$port" "$kim/build/m5/project/.git"
 
 echo "== nothing left behind"
+# A worker clears everything when a job ends, and that can stop a command run here: let the queue go quiet first.
+sleep 5
+worked=0
 for w in $(dc ps -q worker); do
-  left="$(docker exec "$w" sh -c 'ls -A /work | wc -l' | tr -d '\r ')"
-  [ "$left" = 0 ] || { echo "FAIL: $left item(s) left in a worker's /work"; exit 1; }
+  # A worker that never got a job has had no reason to clear.
+  docker logs "$w" 2>&1 | grep -q ' done in ' || continue
+  worked=$((worked + 1))
+  left="$(docker exec "$w" sh -c 'ls -A /work /dev/shm | grep -c left-by-a-job; true' | tr -d '\r ')"
+  [ "$left" = 0 ] || { echo "FAIL: a job's files survived into the next job"; exit 1; }
+  running="$(docker exec "$w" sh -c 'grep -l "^sleep" /proc/[0-9]*/cmdline 2>/dev/null | wc -l' | tr -d '\r ')"
+  [ "$running" = 0 ] || { echo "FAIL: a process left by a job survived into the next job"; exit 1; }
 done
-echo "  ok    every worker's job folder is empty"
+[ "$worked" -gt 0 ] || { echo "FAIL: no worker ran a job"; exit 1; }
+echo "  ok    $worked worker(s) cleared what a job left: no files, no processes"
 
 echo "== size"
 docker images --format '  {{.Repository}} {{.Size}}' | grep nicgit-stackcheck || true

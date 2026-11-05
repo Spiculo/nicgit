@@ -12,11 +12,11 @@ docker compose -f deploy/compose.dev.yaml up -d --wait >/dev/null
 docker compose -f deploy/compose.dev.yaml exec -T db psql -U nicgit -q -c "CREATE DATABASE $db" >/dev/null
 export CARGO_TARGET_DIR="$here/target/e2e"
 cargo build -q -p nicgit-server
-export NICGIT_DATABASE_URL="postgres://nicgit:nicgit@127.0.0.1:5434/$db" NICGIT_DATA_DIR="$data" NICGIT_BIND=127.0.0.1:3100 \
+export NICGIT_DATABASE_URL="postgres://nicgit:nicgit@127.0.0.1:5434/$db" NICGIT_DATA_DIR="$data" NICGIT_BIND=127.0.0.1:3100 NICGIT_INTERNAL_BIND=127.0.0.1:3101 \
        NICGIT_WORKER_TOKEN=e2e-token NICGIT_PUBLIC_URL=http://127.0.0.1:3100
 "$CARGO_TARGET_DIR/debug/nicgit-server" > "$data/server.log" 2>&1 &
 server=$!
-NICGIT_URL=http://127.0.0.1:3100 ./scripts/engine-python.sh -m nicgit_worker --idle 0.3 > "$data/worker.log" 2>&1 &
+NICGIT_URL=http://127.0.0.1:3101 ./scripts/engine-python.sh -m nicgit_worker --idle 0.3 > "$data/worker.log" 2>&1 &
 worker=$!
 cleanup() {
   kill $server $worker 2>/dev/null || true

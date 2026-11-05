@@ -47,9 +47,9 @@ fn forbidden() -> AppError {
     AppError::new(StatusCode::FORBIDDEN, "forbidden", "this job cannot use that file")
 }
 
-/// The most a job may store in one file: the same bound as what an import may unpack to.
+/// The most a job may store in one file: what a project may hold, and so also what an import may unpack to.
 fn artifact_limit(state: &AppState) -> u64 {
-    state.cfg.max_upload_mb.saturating_mul(20) << 20
+    crate::limits::bytes(state.cfg.max_repo_mb)
 }
 
 fn too_large() -> AppError {
@@ -96,6 +96,9 @@ async fn write_artifact(State(state): State<AppState>, headers: HeaderMap, Path(
         let _ = tokio::fs::remove_file(&tmp).await;
         return Err(e);
     }
+    let cfg = state.cfg.clone();
+    let project = job.project;
+    tokio::task::spawn_blocking(move || crate::limits::trim_cache(&cfg, project, &target)).await.map_err(AppError::internal)?;
     Ok(Json(json!({"ok": true})))
 }
 

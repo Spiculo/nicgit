@@ -234,6 +234,12 @@ export const es: Record<Key, string> = {
   'account.orgs': 'Organizaciones',
   'account.newOrg': 'Nueva organización',
   'account.usage': 'Uso este mes',
+  'account.userName': 'Nombre de usuario',
+  'account.userNameHint': 'Tu nombre de usuario es público y forma parte de la dirección de tus proyectos. Si lo cambias, dejarán de funcionar las direcciones y los remotos de git que usen el nombre anterior.',
+  'account.rename': 'Cambiar',
+  'account.storage': 'Almacenamiento',
+  'account.storageUsed': 'Usas {used} de {limit}.',
+  'account.storageLimits': 'Cada proyecto puede guardar hasta {project} y cada archivo hasta {file}.',
 
   'import.title': 'Importar un proyecto',
   'import.hint': 'Un .kim conserva todo su historial y opciones de diseño. Un .ifc se convierte en la primera versión.',

@@ -51,7 +51,9 @@ impl TestApp {
         cfg.hook_exe = env!("CARGO_BIN_EXE_nicgit-server").into();
         tweak(&mut cfg);
         let cfg = Arc::new(cfg);
-        let (router, state) = app::build(cfg.clone()).await.unwrap();
+        let (routers, state) = app::build(cfg.clone()).await.unwrap();
+        // One address for both, so tests reach everything; tests/limits.rs checks they really are separate.
+        let router = routers.public.merge(routers.internal);
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });

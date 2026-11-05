@@ -20,7 +20,7 @@ pub async fn on_push(state: &AppState, project: &Project, user: Option<Uuid>, up
 pub async fn on_job_finished(
     state: &AppState,
     project: Uuid,
-    _job: Uuid,
+    job: Uuid,
     kind: &str,
     args: &serde_json::Value,
     result: Option<&serde_json::Value>,
@@ -38,7 +38,7 @@ pub async fn on_job_finished(
     .fetch_one(&state.db)
     .await?;
     if kind == "checks" {
-        return crate::actions::on_finished(state, &p, result).await;
+        return crate::actions::on_finished(state, &p, job, args, result).await;
     }
     let actor = args["by"].as_str().and_then(|s| Uuid::parse_str(s).ok());
     // What an import did comes from the repository, not from the job's word.

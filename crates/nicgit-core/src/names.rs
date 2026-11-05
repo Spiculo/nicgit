@@ -18,18 +18,38 @@ pub fn valid_slug(s: &str) -> bool {
     !s.ends_with(".git") && !RESERVED.contains(&s)
 }
 
-/// A starting point for a user name, from the part of an email address before the `@`. It may still be
-/// reserved or taken: callers try `base`, `base-2`, `base-3`...
-pub fn slug_base(email: &str) -> String {
-    let local = email.split('@').next().unwrap_or("").to_lowercase();
-    let mapped: String = local.chars().map(|c| if c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '-' | '_' | '.') { c } else { '-' }).collect();
+/// A starting point for a user name, from a person's name: `Ana García` becomes `ana-garcia`. It may still be
+/// reserved or taken: callers try `base`, `base-2`, `base-3`... None when nothing of the name can be used.
+pub fn slug_base(name: &str) -> Option<String> {
+    let folded = name.to_lowercase().chars().map(fold).collect::<String>();
+    let mut mapped = String::with_capacity(folded.len());
+    for c in folded.chars() {
+        let c = if c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | '.') { c } else { '-' };
+        if c != '-' || !mapped.ends_with('-') {
+            mapped.push(c);
+        }
+    }
     let trimmed = mapped.trim_start_matches(['-', '_', '.']);
     let short: String = trimmed.chars().take(56).collect();
     let mut out = short.trim_end_matches(['-', '_', '.']).to_string();
     while let Some(rest) = out.strip_suffix(".git") {
         out = rest.trim_end_matches(['-', '_', '.']).to_string();
     }
-    if out.is_empty() { "user".to_string() } else { out }
+    (!out.is_empty()).then_some(out)
+}
+
+/// The accented letters of the languages NicGit is used in, as their plain letter.
+fn fold(c: char) -> char {
+    match c {
+        'á' | 'à' | 'ä' | 'â' | 'ã' | 'å' => 'a',
+        'é' | 'è' | 'ë' | 'ê' => 'e',
+        'í' | 'ì' | 'ï' | 'î' => 'i',
+        'ó' | 'ò' | 'ö' | 'ô' | 'õ' => 'o',
+        'ú' | 'ù' | 'ü' | 'û' => 'u',
+        'ñ' => 'n',
+        'ç' => 'c',
+        _ => c,
+    }
 }
 
 #[cfg(test)]
@@ -38,14 +58,16 @@ mod tests {
 
     #[test]
     fn slug_base_rules() {
-        assert_eq!(slug_base("Ana.Ferreira@example.com"), "ana.ferreira");
-        assert_eq!(slug_base("a+b@example.com"), "a-b");
-        assert_eq!(slug_base("+++@example.com"), "user");
-        assert_eq!(slug_base("@example.com"), "user");
-        assert_eq!(slug_base("_x_@example.com"), "x");
-        assert_eq!(slug_base("repo.git@example.com"), "repo");
-        assert_eq!(slug_base(&format!("{}@example.com", "a".repeat(100))).len(), 56);
-        assert!(valid_slug(&format!("{}-999", slug_base(&format!("{}@e.c", "a".repeat(100))))));
+        assert_eq!(slug_base("Ana Ferreira").unwrap(), "ana-ferreira");
+        assert_eq!(slug_base("José Núñez Ibáñez").unwrap(), "jose-nunez-ibanez");
+        assert_eq!(slug_base("  Ana   + Bo ").unwrap(), "ana-bo");
+        assert_eq!(slug_base("+++"), None);
+        assert_eq!(slug_base(""), None);
+        assert_eq!(slug_base("山田太郎"), None);
+        assert_eq!(slug_base("_x_").unwrap(), "x");
+        assert_eq!(slug_base("repo.git").unwrap(), "repo");
+        assert_eq!(slug_base(&"a".repeat(100)).unwrap().len(), 56);
+        assert!(valid_slug(&format!("{}-999", slug_base(&"a".repeat(100)).unwrap())));
     }
 
     #[test]

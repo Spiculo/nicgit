@@ -14,4 +14,4 @@ cargo build -p nicgit-server
 server=$!
 trap 'kill $server 2>/dev/null' EXIT INT TERM
 sleep 2
-NICGIT_URL=http://127.0.0.1:3000 ./scripts/engine-python.sh -m nicgit_worker
+NICGIT_URL=http://127.0.0.1:3001 ./scripts/engine-python.sh -m nicgit_worker

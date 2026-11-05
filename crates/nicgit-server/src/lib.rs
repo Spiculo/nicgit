@@ -17,6 +17,7 @@ pub mod events;
 pub mod git;
 pub mod gitread;
 pub mod jobs;
+pub mod limits;
 pub mod metering;
 pub mod notify;
 pub mod proposals;

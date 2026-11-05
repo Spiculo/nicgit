@@ -6,6 +6,7 @@ use crate::{
     app::AppState,
     auth::MaybeUser,
     error::{ApiResult, AppError},
+    limits::Room,
 };
 use axum::{
     body::Body,
@@ -28,6 +29,11 @@ pub fn router() -> Router<AppState> {
         .route("/{owner}/{repo}/info/refs", get(info_refs))
         .route("/{owner}/{repo}/git-upload-pack", post(upload_pack))
         .route("/{owner}/{repo}/git-receive-pack", post(receive_pack))
+}
+
+/// The same transport for engine jobs, on the workers' address.
+pub fn job_router() -> Router<AppState> {
+    Router::new()
         .route("/internal/jobs/{id}/git/info/refs", get(job_info_refs))
         .route("/internal/jobs/{id}/git/git-upload-pack", post(job_upload_pack))
         .route("/internal/jobs/{id}/git/git-receive-pack", post(job_receive_pack))
@@ -99,21 +105,40 @@ async fn info_refs(
         Ok(ok) => ok,
         Err(r) => return r,
     };
+    if service == Service::Receive {
+        match crate::limits::room(&state, project.id, false).await {
+            Ok(Room { full: Some(reason), .. }) => return refuse_push(&reason),
+            Ok(_) => {}
+            Err(e) => return e.into_response(),
+        }
+    }
     advertise(&state, &project.repo_dir(&state).join(".git"), service, &headers, false).await
 }
 
+/// Told this way, git shows the pusher the reason rather than an HTTP status.
+fn refuse_push(reason: &str) -> Response {
+    let mut body = pkt_line(&format!("# service={}\n", Service::Receive.name()));
+    body.extend_from_slice(b"0000");
+    body.extend_from_slice(&pkt_line(&format!("ERR NicGit: {reason}\n")));
+    ([(header::CONTENT_TYPE, format!("application/x-{}-advertisement", Service::Receive.name())), (header::CACHE_CONTROL, "no-cache".to_string())], body).into_response()
+}
+
 /// A job fetches single versions by commit id, which plain upload-pack only allows for branch tips.
-fn git_command(state: &AppState, service: Service, job: bool) -> tokio::process::Command {
+/// `max_input` is the largest pack git may accept in a push.
+fn git_command(state: &AppState, service: Service, job: bool, max_input: Option<u64>) -> tokio::process::Command {
     let mut cmd = tokio::process::Command::new(&state.cfg.git);
     if job && service == Service::Upload {
         cmd.args(["-c", "uploadpack.allowReachableSHA1InWant=true"]);
+    }
+    if let Some(n) = max_input {
+        cmd.arg("-c").arg(format!("receive.maxInputSize={n}"));
     }
     cmd.arg(&service.name()[4..]);
     cmd
 }
 
 async fn advertise(state: &AppState, git_dir: &std::path::Path, service: Service, headers: &HeaderMap, job: bool) -> Response {
-    let mut cmd = git_command(state, service, job);
+    let mut cmd = git_command(state, service, job, None);
     cmd.args(["--stateless-rpc", "--advertise-refs"]).arg(git_dir);
     if let Some(p) = headers.get("git-protocol").and_then(|v| v.to_str().ok()) {
         cmd.env("GIT_PROTOCOL", p);
@@ -155,12 +180,22 @@ async fn rpc(
 ) -> Result<Response, Response> {
     let (project, role) = authorize(&state, &user, &owner, &repo, service).await?;
     let git_dir = project.repo_dir(&state).join(".git");
-    let mut cmd = git_command(&state, service, false);
+    let max_input = if service == Service::Receive {
+        let room = crate::limits::room(&state, project.id, false).await.map_err(|e| e.into_response())?;
+        if let Some(reason) = room.full {
+            return Err(crate::limits::storage_full(reason).into_response());
+        }
+        Some(room.bytes)
+    } else {
+        None
+    };
+    let mut cmd = git_command(&state, service, false, max_input);
     cmd.arg("--stateless-rpc").arg(&git_dir);
     let before = if service == Service::Receive {
         let protected = crate::rules::protected_options(&state.db, project.id).await.map_err(|e| e.into_response())?;
         cmd.env("NICGIT_ROLE", role.as_str())
             .env("NICGIT_PROTECTED", protected.join("\u{1f}"))
+            .env("NICGIT_MAX_FILE_BYTES", crate::limits::bytes(state.cfg.max_file_mb).to_string())
             .env("NICGIT_GIT", &state.cfg.git);
         Some(super::refs(&state.cfg.git, &git_dir).await.map_err(|e| AppError::internal(e).into_response())?)
     } else {
@@ -234,6 +269,13 @@ async fn job_info_refs(State(state): State<AppState>, Path(id): Path<Uuid>, Quer
         "git-receive-pack" => return job_forbidden(),
         _ => return AppError::bad_request("dumb HTTP is not supported").into_response(),
     };
+    if service == Service::Receive {
+        match job_push_room(&state, &job).await {
+            Ok(Err(reason)) => return refuse_push(&reason),
+            Ok(Ok(_)) => {}
+            Err(e) => return e.into_response(),
+        }
+    }
     advertise(&state, &crate::repos::git_dir(&state.cfg, job.project), service, &headers, true).await
 }
 
@@ -242,9 +284,23 @@ async fn job_upload_pack(State(state): State<AppState>, Path(id): Path<Uuid>, he
         Ok(j) => j,
         Err(e) => return e.into_response(),
     };
-    let mut cmd = git_command(&state, Service::Upload, true);
+    let mut cmd = git_command(&state, Service::Upload, true, None);
     cmd.arg("--stateless-rpc").arg(crate::repos::git_dir(&state.cfg, job.project));
     finish_job_rpc(cmd, Service::Upload, &headers, body)
+}
+
+/// A combine adds little, and a full project must still be able to finish its proposals, so it always has this.
+const COMBINE_ALLOWANCE: u64 = 64 << 20;
+
+/// How large a pack this job may push, or why it may not push.
+async fn job_push_room(state: &AppState, job: &RunningJob) -> ApiResult<Result<u64, String>> {
+    let combine = job.kind == "combine";
+    let room = crate::limits::room(state, job.project, !combine).await?;
+    Ok(match room.full {
+        Some(reason) if !combine => Err(reason),
+        _ if combine => Ok(room.bytes.max(COMBINE_ALLOWANCE)),
+        _ => Ok(room.bytes),
+    })
 }
 
 async fn job_receive_pack(State(state): State<AppState>, Path(id): Path<Uuid>, headers: HeaderMap, body: Body) -> Response {
@@ -253,11 +309,17 @@ async fn job_receive_pack(State(state): State<AppState>, Path(id): Path<Uuid>, h
         Err(e) => return e.into_response(),
     };
     let Some((rule, protected)) = job.push_rule() else { return job_forbidden() };
-    let mut cmd = git_command(&state, Service::Receive, true);
+    let max_input = match job_push_room(&state, &job).await {
+        Ok(Ok(n)) => n,
+        Ok(Err(reason)) => return crate::limits::storage_full(reason).into_response(),
+        Err(e) => return e.into_response(),
+    };
+    let mut cmd = git_command(&state, Service::Receive, true, Some(max_input));
     cmd.arg("--stateless-rpc").arg(crate::repos::git_dir(&state.cfg, job.project));
     // The hook checks a job like a lead on a protected option, within the refs the job may touch.
     cmd.env("NICGIT_ROLE", Role::Lead.as_str())
         .env("NICGIT_PROTECTED", protected.join("\u{1f}"))
+        .env("NICGIT_MAX_FILE_BYTES", crate::limits::bytes(state.cfg.max_file_mb).to_string())
         .env("NICGIT_GIT", &state.cfg.git)
         .env("NICGIT_JOB_REFS", rule);
     finish_job_rpc(cmd, Service::Receive, &headers, body)

@@ -11,7 +11,16 @@ pub struct Config {
     pub public_url: String,
     pub ai_router_url: Option<String>,
     pub ai_router_key: Option<String>,
-    pub max_upload_mb: u64,
+    /// Where engine workers connect. Nothing else needs this address, so it is never published (decision N35).
+    pub internal_bind: String,
+    /// The largest single file: an upload, or a file in a push (decision N33).
+    pub max_file_mb: u64,
+    /// The most one project's repository may hold, and separately its cached exports.
+    pub max_repo_mb: u64,
+    /// The most an account may hold across its projects.
+    pub max_account_mb: u64,
+    pub max_projects: u64,
+    pub max_orgs: u64,
     /// Folder with the built web app (`web/dist`); not served when missing.
     pub web_dir: Option<PathBuf>,
     /// The `git` executable.
@@ -35,6 +44,10 @@ fn var(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.is_empty())
 }
 
+fn number(name: &str, default: u64) -> u64 {
+    var(name).and_then(|v| v.parse().ok()).unwrap_or(default)
+}
+
 impl Config {
     pub fn from_env() -> anyhow::Result<Config> {
         let bind = var("NICGIT_BIND").unwrap_or_else(|| "127.0.0.1:3000".into());
@@ -47,7 +60,12 @@ impl Config {
                 .ok_or_else(|| anyhow::anyhow!("NICGIT_WORKER_TOKEN must be set (shared with engine workers)"))?,
             ai_router_url: var("NICGIT_AI_ROUTER_URL"),
             ai_router_key: var("NICGIT_AI_ROUTER_KEY"),
-            max_upload_mb: var("NICGIT_MAX_UPLOAD_MB").and_then(|v| v.parse().ok()).unwrap_or(2048),
+            internal_bind: var("NICGIT_INTERNAL_BIND").unwrap_or_else(|| "127.0.0.1:3001".into()),
+            max_file_mb: number("NICGIT_MAX_FILE_MB", 512),
+            max_repo_mb: number("NICGIT_MAX_REPO_MB", 2048),
+            max_account_mb: number("NICGIT_MAX_ACCOUNT_MB", 5120),
+            max_projects: number("NICGIT_MAX_PROJECTS", 100),
+            max_orgs: number("NICGIT_MAX_ORGS", 3),
             web_dir: var("NICGIT_WEB_DIR").map(PathBuf::from).or_else(|| {
                 let d = PathBuf::from("web/dist");
                 d.is_dir().then_some(d)
@@ -75,7 +93,12 @@ impl Config {
             public_url: "http://localhost".into(),
             ai_router_url: None,
             ai_router_key: None,
-            max_upload_mb: 64,
+            internal_bind: "127.0.0.1:0".into(),
+            max_file_mb: 64,
+            max_repo_mb: 1024,
+            max_account_mb: 4096,
+            max_projects: 100,
+            max_orgs: 100,
             web_dir: None,
             git: "git".into(),
             hook_exe: PathBuf::new(),

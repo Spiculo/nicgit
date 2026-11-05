@@ -232,6 +232,12 @@ export const en = {
   'account.orgs': 'Organisations',
   'account.newOrg': 'New organisation',
   'account.usage': 'Usage this month',
+  'account.userName': 'User name',
+  'account.userNameHint': 'Your user name is public, and part of the address of your projects. If you change it, addresses and git remotes using the old name stop working.',
+  'account.rename': 'Change',
+  'account.storage': 'Storage',
+  'account.storageUsed': 'Using {used} of {limit}.',
+  'account.storageLimits': 'Each project can hold up to {project}, and each file up to {file}.',
 
   'import.title': 'Import a project',
   'import.hint': 'A .kim keeps its whole history and design options. An .ifc becomes the first version.',

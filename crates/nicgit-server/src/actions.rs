@@ -8,6 +8,7 @@ use crate::{
     jobs::{self, JobState},
 };
 use serde_json::{json, Value};
+use uuid::Uuid;
 
 pub const CHECKS: [&str; 4] = ["schema", "ids", "clash", "model"];
 
@@ -81,9 +82,12 @@ pub async fn status(state: &AppState, project: &Project, commit: &str, required:
 }
 
 /// Meter a finished checks run: whole seconds, rounded up, at least one.
-pub async fn on_finished(state: &AppState, project: &Project, result: &Value) -> ApiResult<()> {
-    let seconds = result["seconds"].as_f64().unwrap_or(0.0).ceil().max(1.0) as i64;
-    crate::metering::record(state, project.owner_id, Some(project.id), "action_seconds", seconds).await?;
-    crate::activity::record(&state.db, project.id, None, "checks.finished", json!({"commit": result["rev"], "passed": result["passed"]})).await?;
+/// The time billed and the version named come from the server's own records, not from the job: a model that
+/// took over the engine could say anything about itself (decision N36).
+pub async fn on_finished(state: &AppState, project: &Project, job: Uuid, args: &Value, result: &Value) -> ApiResult<()> {
+    let seconds: f64 = sqlx::query_scalar("SELECT coalesce(extract(epoch FROM finished_at - started_at)::float8, 0) FROM jobs WHERE id = $1").bind(job).fetch_one(&state.db).await?;
+    crate::metering::record(state, project.owner_id, Some(project.id), "action_seconds", seconds.ceil().max(1.0) as i64).await?;
+    let passed = result["passed"].as_bool().unwrap_or(false);
+    crate::activity::record(&state.db, project.id, None, "checks.finished", json!({"commit": args["rev"], "passed": passed})).await?;
     Ok(())
 }

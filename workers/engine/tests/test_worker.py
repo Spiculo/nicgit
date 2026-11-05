@@ -122,6 +122,44 @@ def test_child_that_finished_normally_is_left_alone(monkeypatch):
     supervisor.run_in_child("http://server", job())
 
 
+def test_a_job_past_its_time_is_stopped_and_reported(monkeypatch):
+    calls = []
+
+    class Recording:
+        def __init__(self, url, job_id, token):
+            pass
+
+        def finish(self, *, result=None, error=None):
+            calls.append(error)
+    monkeypatch.setattr(client_module, "JobClient", Recording)
+    _script(monkeypatch, "import time; time.sleep(60)")
+    started = time.monotonic()
+    supervisor.run_in_child("http://server", job(), timeout=0.5)
+    assert time.monotonic() - started < 30
+    assert len(calls) == 1 and "longer than" in calls[0]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process groups")
+def test_what_a_job_started_stops_with_it(monkeypatch, tmp_path):
+    out = tmp_path / "pid"
+    code = ("import subprocess, sys; "
+            "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)']); "
+            f"open({str(out)!r}, 'w').write(str(p.pid))")
+    _script(monkeypatch, code)
+    supervisor.run_in_child("http://server", job())
+    pid = int(out.read_text())
+    time.sleep(0.3)
+    state = pathlib.Path(f"/proc/{pid}/stat")
+    assert not state.exists() or state.read_text().split(")")[1].split()[0] == "Z"
+
+
+@pytest.mark.parametrize("env,pid", [({"NICGIT_WORKER_CONTAINED": "1"}, 4242), ({}, 1), ({}, 4242), ({"NICGIT_WORKER_CONTAINED": "0"}, 1)])
+def test_clearing_everything_only_ever_happens_alone_in_a_container(monkeypatch, env, pid):
+    # Outside a container it would stop everything this user runs, so it must take both conditions.
+    monkeypatch.setattr(supervisor.os, "kill", lambda *a: pytest.fail("killed something"), raising=False)
+    assert supervisor.clear_after_job(env, pid) is False
+
+
 def test_supervisor_serves_every_handler_kind():
     assert sorted(supervisor.KINDS) == handlers.kinds()
 

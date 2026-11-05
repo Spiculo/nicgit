@@ -87,7 +87,7 @@ fn new_blobs(u: &Update) -> Result<Vec<(String, String)>, String> {
             // ":old_mode new_mode old_id new_id status\tpath"
             let Some((meta, path)) = line.split_once('\t') else { continue };
             let fields: Vec<&str> = meta.split_whitespace().collect();
-            if fields.len() >= 4 && must_be_json(path) {
+            if fields.len() >= 4 {
                 out.push((path.to_string(), fields[3].to_string()));
             }
         }
@@ -95,6 +95,46 @@ fn new_blobs(u: &Update) -> Result<Vec<(String, String)>, String> {
     out.sort();
     out.dedup();
     Ok(out)
+}
+
+/// The paths of blobs larger than `max`, asked of git without reading them.
+fn oversized(blobs: &[(String, String)], max: u64) -> Result<Vec<String>, String> {
+    if blobs.is_empty() {
+        return Ok(vec![]);
+    }
+    let git = std::env::var("NICGIT_GIT").unwrap_or_else(|_| "git".into());
+    let mut child = Command::new(git)
+        .args(["cat-file", "--batch-check"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    let mut stdin = child.stdin.take().expect("piped");
+    let ids: Vec<String> = blobs.iter().map(|(_, id)| id.clone()).collect();
+    let writer = std::thread::spawn(move || {
+        for id in ids {
+            if writeln!(stdin, "{id}").is_err() {
+                break;
+            }
+        }
+    });
+    let reader = std::io::BufReader::new(child.stdout.take().expect("piped"));
+    let mut bad = Vec::new();
+    for ((path, _), line) in blobs.iter().zip(reader.lines()) {
+        // "<id> blob <size>"; a submodule's commit is not here and answers "<id> missing".
+        let line = line.map_err(|e| e.to_string())?;
+        if line.split_whitespace().nth(2).and_then(|s| s.parse::<u64>().ok()).is_some_and(|size| size > max) {
+            bad.push(path.clone());
+        }
+    }
+    let _ = writer.join();
+    let _ = child.wait();
+    Ok(bad)
+}
+
+fn listed(paths: &[String]) -> String {
+    let shown: Vec<&str> = paths.iter().take(5).map(String::as_str).collect();
+    format!("{}{}", shown.join(", "), if paths.len() > 5 { ", ..." } else { "" })
 }
 
 /// Read blobs with one `git cat-file --batch` and return the paths whose content is not a JSON object.
@@ -147,6 +187,7 @@ pub fn pre_receive() -> i32 {
         .map(str::to_string)
         .collect();
     let job_rule = std::env::var("NICGIT_JOB_REFS").ok();
+    let max_file: Option<u64> = std::env::var("NICGIT_MAX_FILE_BYTES").ok().and_then(|v| v.parse().ok());
     let stdin = std::io::stdin();
     let mut updates = Vec::new();
     for line in stdin.lock().lines().map_while(Result::ok) {
@@ -165,17 +206,31 @@ pub fn pre_receive() -> i32 {
             errors.push(e);
             continue;
         }
-        match new_blobs(u).and_then(|b| invalid_json(&b)) {
-            Ok(bad) if bad.is_empty() => {}
-            Ok(bad) => {
-                let shown: Vec<&str> = bad.iter().take(5).map(String::as_str).collect();
-                errors.push(format!(
-                    "{} record(s) are not valid KimBim JSON (a text merge or a manual edit?): {}{}",
-                    bad.len(),
-                    shown.join(", "),
-                    if bad.len() > 5 { ", ..." } else { "" }
-                ));
+        let blobs = match new_blobs(u) {
+            Ok(b) => b,
+            Err(e) => {
+                errors.push(format!("could not check the push: {e}"));
+                continue;
             }
+        };
+        // Sizes first: the record check below reads blobs into memory.
+        if let Some(max) = max_file {
+            match oversized(&blobs, max) {
+                Ok(bad) if bad.is_empty() => {}
+                Ok(bad) => {
+                    errors.push(format!("{} file(s) are larger than the {} MB limit: {}", bad.len(), max >> 20, listed(&bad)));
+                    continue;
+                }
+                Err(e) => {
+                    errors.push(format!("could not check the push: {e}"));
+                    continue;
+                }
+            }
+        }
+        let records: Vec<(String, String)> = blobs.into_iter().filter(|(path, _)| must_be_json(path)).collect();
+        match invalid_json(&records) {
+            Ok(bad) if bad.is_empty() => {}
+            Ok(bad) => errors.push(format!("{} record(s) are not valid KimBim JSON (a text merge or a manual edit?): {}", bad.len(), listed(&bad))),
             Err(e) => errors.push(format!("could not check the push: {e}")),
         }
     }

@@ -348,12 +348,12 @@ async fn artifact_kind_not_allowed() {
 
 #[tokio::test]
 async fn artifact_size_limit() {
-    let f = fixture_with(|cfg| cfg.max_upload_mb = 0).await;
+    let f = fixture_with(|cfg| cfg.max_repo_mb = 1).await;
     let job = f.job("export_ifc", json!({})).await;
     let r = reqwest::Client::new()
         .put(f.app.url(&format!("/internal/jobs/{}/artifacts/ifc/a.ifc", job_id(&job))))
         .bearer_auth(job["token"].as_str().unwrap())
-        .body(vec![0u8; 1024])
+        .body(vec![0u8; (1 << 20) + 1])
         .send()
         .await
         .unwrap();

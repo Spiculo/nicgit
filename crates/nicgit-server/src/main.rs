@@ -38,9 +38,10 @@ async fn serve() -> anyhow::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
     let cfg = Arc::new(Config::from_env()?);
-    let (router, _state) = app::build(cfg.clone()).await?;
-    let listener = tokio::net::TcpListener::bind(&cfg.bind).await?;
-    tracing::info!("listening on {}", listener.local_addr()?);
-    axum::serve(listener, router).await?;
+    let (routers, _state) = app::build(cfg.clone()).await?;
+    let public = tokio::net::TcpListener::bind(&cfg.bind).await?;
+    let internal = tokio::net::TcpListener::bind(&cfg.internal_bind).await?;
+    tracing::info!("listening on {}, engine workers on {}", public.local_addr()?, internal.local_addr()?);
+    tokio::try_join!(axum::serve(public, routers.public).into_future(), axum::serve(internal, routers.internal).into_future())?;
     Ok(())
 }

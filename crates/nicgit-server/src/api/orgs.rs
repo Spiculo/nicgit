@@ -62,10 +62,14 @@ async fn create_org(State(state): State<AppState>, user: CurrentUser, Json(b): J
     if !nicgit_core::names::valid_slug(&b.slug) {
         return Err(AppError::bad_request("organisation names use lowercase letters, digits, '-', '_' or '.'"));
     }
+    crate::limits::check_new_org(&state, user.id).await?;
     let id = Uuid::new_v4();
     let display = if b.display_name.trim().is_empty() { b.slug.clone() } else { b.display_name.trim().to_string() };
     let mut tx = state.db.begin().await?;
-    let r = sqlx::query("INSERT INTO accounts (id, kind, slug, display_name) VALUES ($1, 'org', $2, $3) ON CONFLICT DO NOTHING")
+    let r = sqlx::query(
+        "INSERT INTO accounts (id, kind, slug, display_name) SELECT $1, 'org', $2, $3 \
+         WHERE NOT EXISTS (SELECT 1 FROM retired_slugs WHERE slug = $2) ON CONFLICT DO NOTHING",
+    )
         .bind(id)
         .bind(&b.slug)
         .bind(&display)

@@ -127,7 +127,7 @@ async fn import_upload_creates_project_and_job() {
     let part = reqwest::multipart::Part::bytes(b"x".to_vec()).file_name("model.rvt");
     let form = reqwest::multipart::Form::new().text("owner", "alice").text("slug", "rvt").part("file", part);
     assert_eq!(alice.post(app.url("/api/projects/import")).multipart(form).send().await.unwrap().status(), 400);
-    let big = vec![0u8; (app.cfg.max_upload_mb as usize + 1) << 20];
+    let big = vec![0u8; (app.cfg.max_file_mb as usize + 1) << 20];
     let part = reqwest::multipart::Part::bytes(big).file_name("big.ifc");
     let form = reqwest::multipart::Form::new().text("owner", "alice").text("slug", "big").part("file", part);
     assert_eq!(alice.post(app.url("/api/projects/import")).multipart(form).send().await.unwrap().status(), 413);

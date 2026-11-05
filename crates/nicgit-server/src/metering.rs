@@ -3,7 +3,8 @@
 //!
 //! Kinds: `storage_bytes` and `package_storage_bytes` are sampled gauges (the latest sample per project
 //! counts); everything else (`action_seconds`, `egress_bytes`, `package_egress_bytes`, `ai_units`) is summed
-//! over the current calendar month. A hard limit blocks only Actions and AI, never reading or pushing.
+//! over the current calendar month. A budget's hard limit blocks only Actions and AI, never reading or
+//! pushing. How much can be stored is a separate matter: see `limits`.
 use crate::{
     access::Project,
     app::AppState,
@@ -67,7 +68,7 @@ pub async fn check(state: &AppState, account: Uuid, kind: &str) -> ApiResult<()>
     Ok(())
 }
 
-fn dir_size(p: &Path) -> u64 {
+pub fn dir_size(p: &Path) -> u64 {
     let Ok(rd) = std::fs::read_dir(p) else { return 0 };
     rd.filter_map(Result::ok)
         .map(|e| match e.file_type() {

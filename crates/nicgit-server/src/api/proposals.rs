@@ -380,10 +380,7 @@ async fn run_combine(
     let settings_resolutions = conflicts::resolve(mode, &settings_keys, &b.settings_picks)
         .map_err(|m| AppError::new(StatusCode::CONFLICT, "conflicts_unresolved", serde_json::to_string(&m.0).unwrap_or_default()))?;
 
-    let (name, email): (String, String) = sqlx::query_as("SELECT a.display_name, u.email FROM users u JOIN accounts a ON a.id = u.account_id WHERE u.account_id = $1")
-        .bind(user.id)
-        .fetch_one(&state.db)
-        .await?;
+    let (name, email) = crate::auth::commit_identity(&state.db, user.id).await?;
     let approvers: Vec<String> = proposals::reviews(state, prop.id)
         .await?
         .into_iter()

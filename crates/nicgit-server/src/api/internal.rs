@@ -87,13 +87,39 @@ struct Claim {
 /// Workers report every minute (nicgit_worker's heartbeat), however long the job takes.
 const STALE_MINUTES: i32 = 10;
 
+/// A job that took its worker down this many times would keep doing so: it fails instead of going round again.
+const MAX_ATTEMPTS: i32 = 3;
+
+/// Give up on jobs that keep losing their worker. The uploads they were importing go with them.
+async fn fail_repeatedly_lost(state: &AppState) -> ApiResult<()> {
+    let lost: Vec<(Uuid, Value)> = sqlx::query_as(
+        "UPDATE jobs SET status = 'failed', error = 'the engine stopped repeatedly while working on this', progress = 0, finished_at = now(), token_hash = NULL \
+         WHERE status = 'running' AND attempts >= $1 AND coalesce(heartbeat_at, started_at) < now() - make_interval(mins => $2) \
+         RETURNING project_id, args",
+    )
+    .bind(MAX_ATTEMPTS)
+    .bind(STALE_MINUTES)
+    .fetch_all(&state.db)
+    .await?;
+    for (project, args) in lost {
+        if let Some(path) = args["upload"].as_str().and_then(|n| crate::repos::upload_path(&state.cfg, project, n)) {
+            let _ = tokio::fs::remove_file(path).await;
+        }
+    }
+    Ok(())
+}
+
 async fn claim(State(state): State<AppState>, _w: Worker, Json(b): Json<Claim>) -> ApiResult<Response> {
+    fail_repeatedly_lost(&state).await?;
     let token = crate::auth::new_session_token();
+    // The account with the fewest jobs running goes first, oldest job first within that, so one account filling
+    // the queue cannot keep everyone else waiting (decision N33).
     let row: Option<(Uuid, Uuid, String, Value)> = sqlx::query_as(
         "UPDATE jobs SET status = 'running', started_at = now(), heartbeat_at = now(), attempts = attempts + 1, progress = 0, token_hash = $3 \
-         WHERE id = (SELECT id FROM jobs WHERE kind = ANY($1) AND \
-                       (status = 'queued' OR (status = 'running' AND coalesce(heartbeat_at, started_at) < now() - make_interval(mins => $2))) \
-                     ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) \
+         WHERE id = (SELECT j.id FROM jobs j JOIN projects p ON p.id = j.project_id WHERE j.kind = ANY($1) AND \
+                       (j.status = 'queued' OR (j.status = 'running' AND coalesce(j.heartbeat_at, j.started_at) < now() - make_interval(mins => $2))) \
+                     ORDER BY (SELECT count(*) FROM jobs r JOIN projects rp ON rp.id = r.project_id WHERE r.status = 'running' AND rp.owner_id = p.owner_id), j.created_at \
+                     FOR UPDATE OF j SKIP LOCKED LIMIT 1) \
          RETURNING id, project_id, kind, args",
     )
     .bind(&b.kinds)

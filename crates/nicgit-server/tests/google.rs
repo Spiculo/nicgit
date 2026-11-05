@@ -79,7 +79,7 @@ async fn new_user_signs_in() {
     let c = browser();
     assert_eq!(sign_in(&app, &mock, &c, good_claims("s1", "Ana@Example.com")).await, "/");
     let v = me(&app, &c).await;
-    assert_eq!(v["slug"], "ana");
+    assert_eq!(v["slug"], "ana-ferreira");
     assert_eq!(v["email"], "ana@example.com");
     assert_eq!(v["display_name"], "Ana Ferreira");
     assert_eq!(v["is_site_admin"], false);
@@ -197,7 +197,7 @@ async fn sub_is_identity_not_email() {
     sign_in(&app, &mock, &c2, good_claims("s1", "ana.new@example.com")).await;
     let second = me(&app, &c2).await;
     assert_eq!(first["id"], second["id"]);
-    assert_eq!(second["slug"], "ana", "the user name stays");
+    assert_eq!(second["slug"], "ana-ferreira", "the user name stays");
     assert_eq!(second["email"], "ana.new@example.com");
 }
 
@@ -265,21 +265,37 @@ async fn first_user_is_not_admin_without_config() {
     assert_eq!(me(&app, &c).await["is_site_admin"], false);
 }
 
+fn named(sub: &str, email: &str, name: &str) -> Value {
+    let mut claims = good_claims(sub, email);
+    claims["name"] = json!(name);
+    claims
+}
+
 #[tokio::test]
-async fn slug_from_awkward_email() {
+async fn slug_comes_from_the_name_and_never_the_email() {
     let (app, mock) = setup(None).await;
-    for (sub, email, slug) in [
-        ("s1", "api@example.com", "api-2"),
-        ("s2", "a+b@example.com", "a-b"),
-        ("s3", "ana@one.example", "ana"),
-        ("s4", "ana@two.example", "ana-2"),
-        ("s5", "ana@three.example", "ana-3"),
-        ("s6", "+++@example.com", "user"),
-        ("s7", "José.Núñez@example.com", "jos-.n--ez"),
+    for (sub, name, slug) in [
+        ("s1", "API", "api-2"),
+        ("s2", "José Núñez", "jose-nunez"),
+        ("s3", "Ana Ferreira", "ana-ferreira"),
+        ("s4", "Ana Ferreira", "ana-ferreira-2"),
+        ("s5", "Ana Ferreira", "ana-ferreira-3"),
     ] {
         let c = browser();
-        assert_eq!(sign_in(&app, &mock, &c, good_claims(sub, email)).await, "/", "{email}");
-        assert_eq!(me(&app, &c).await["slug"], slug, "{email}");
+        let email = format!("private.address.{sub}@example.com");
+        assert_eq!(sign_in(&app, &mock, &c, named(sub, &email, name)).await, "/", "{name}");
+        assert_eq!(me(&app, &c).await["slug"], slug, "{name}");
+    }
+}
+
+#[tokio::test]
+async fn a_name_that_cannot_be_a_slug_gets_a_neutral_one() {
+    let (app, mock) = setup(None).await;
+    for (sub, name) in [("s1", ""), ("s2", "山田太郎"), ("s3", "+++")] {
+        let c = browser();
+        sign_in(&app, &mock, &c, named(sub, &format!("secret.{sub}@example.com"), name)).await;
+        let slug = me(&app, &c).await["slug"].as_str().unwrap().to_string();
+        assert!(slug.starts_with("user-") && !slug.contains("secret"), "{slug}");
     }
 }
 
@@ -289,8 +305,18 @@ async fn slug_avoids_org_names() {
     let alice = app.user("alice").await;
     alice.post(app.url("/api/orgs")).json(&json!({"slug": "studio"})).send().await.unwrap();
     let c = browser();
-    sign_in(&app, &mock, &c, good_claims("s1", "studio@example.com")).await;
+    sign_in(&app, &mock, &c, named("s1", "x@example.com", "Studio")).await;
     assert_eq!(me(&app, &c).await["slug"], "studio-2");
+}
+
+#[tokio::test]
+async fn slug_avoids_names_given_up_by_someone_else() {
+    let (app, mock) = setup(None).await;
+    let alice = app.user("ana").await;
+    assert_eq!(alice.patch(app.url("/api/me")).json(&json!({"slug": "ana-new"})).send().await.unwrap().status(), 200);
+    let c = browser();
+    sign_in(&app, &mock, &c, named("s1", "x@example.com", "Ana")).await;
+    assert_eq!(me(&app, &c).await["slug"], "ana-2");
 }
 
 #[tokio::test]

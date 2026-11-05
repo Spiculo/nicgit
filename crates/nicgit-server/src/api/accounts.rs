@@ -23,6 +23,11 @@ pub fn router() -> Router<AppState> {
         .route("/api/accounts/{slug}/ai", get(get_ai).put(set_ai))
         .route("/api/accounts/{slug}/budgets/{kind}", put(set_budget))
         .route("/api/me/usage", get(my_usage))
+        .route("/api/me/storage", get(my_storage))
+}
+
+async fn my_storage(State(state): State<AppState>, user: CurrentUser) -> ApiResult<Json<Value>> {
+    Ok(Json(crate::limits::summary(&state, user.id).await?))
 }
 
 /// The account's id when the caller administers it (themselves, or an organisation they are admin of).
@@ -40,7 +45,7 @@ pub async fn administered(state: &AppState, slug: &str, user: &CurrentUser) -> A
 
 async fn usage_of(state: &AppState, account: Uuid) -> ApiResult<Value> {
     let usage: Vec<Value> = metering::usage(state, account).await?.into_iter().map(|(k, q)| json!({"kind": k, "quantity": q})).collect();
-    Ok(json!({"usage": usage, "budgets": metering::budgets(state, account).await?}))
+    Ok(json!({"usage": usage, "budgets": metering::budgets(state, account).await?, "storage": crate::limits::summary(state, account).await?}))
 }
 
 async fn usage(State(state): State<AppState>, user: CurrentUser, Path(slug): Path<String>) -> ApiResult<Json<Value>> {

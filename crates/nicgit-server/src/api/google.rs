@@ -226,8 +226,14 @@ async fn account(state: &AppState, who: &Identity) -> Result<Uuid, &'static str>
     Ok(id)
 }
 
+/// A few random characters, for a person whose name cannot become a user name.
+fn id_hint() -> String {
+    Uuid::new_v4().simple().to_string()[..8].to_string()
+}
+
 async fn create(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, who: &Identity) -> Result<Uuid, &'static str> {
-    let base = nicgit_core::names::slug_base(&who.email);
+    // From the name on the Google account, never the email address: user names are public (decision N34).
+    let base = nicgit_core::names::slug_base(&who.name).unwrap_or_else(|| format!("user-{}", &id_hint()));
     let id = Uuid::new_v4();
     let mut taken = true;
     for n in 1..=1000 {
@@ -236,7 +242,10 @@ async fn create(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, who: &Identity) 
             continue;
         }
         let display = if who.name.is_empty() { slug.as_str() } else { who.name.as_str() };
-        let inserted = sqlx::query("INSERT INTO accounts (id, kind, slug, display_name) VALUES ($1, 'user', $2, $3) ON CONFLICT (slug) DO NOTHING")
+        let inserted = sqlx::query(
+            "INSERT INTO accounts (id, kind, slug, display_name) SELECT $1, 'user', $2, $3 \
+             WHERE NOT EXISTS (SELECT 1 FROM retired_slugs WHERE slug = $2) ON CONFLICT (slug) DO NOTHING",
+        )
             .bind(id)
             .bind(&slug)
             .bind(display)

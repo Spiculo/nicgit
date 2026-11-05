@@ -2,7 +2,7 @@
 //! Whole projects in and out: import a .kim or .ifc as a new project; download a .kim.
 use crate::{
     access,
-    api::{jobs::respond, projects::{create_project, NewProject}},
+    api::{jobs::respond, projects::{create_project, new_project_owner, NewProject}},
     app::AppState,
     auth::{CurrentUser, MaybeUser},
     error::{ApiResult, AppError},
@@ -25,8 +25,8 @@ use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
-pub fn router(max_upload_mb: u64) -> Router<AppState> {
-    let limit = usize::try_from((max_upload_mb + 1) << 20).unwrap_or(usize::MAX);
+pub fn router(max_file_mb: u64) -> Router<AppState> {
+    let limit = usize::try_from((max_file_mb + 1) << 20).unwrap_or(usize::MAX);
     Router::new()
         .route("/api/projects/import", post(import).layer(DefaultBodyLimit::max(limit)))
         .route("/api/projects/{owner}/{slug}/export.kim", get(export))
@@ -37,12 +37,12 @@ fn too_large(mb: u64) -> AppError {
 }
 
 async fn import(State(state): State<AppState>, user: CurrentUser, mut form: Multipart) -> ApiResult<Json<serde_json::Value>> {
-    let max = state.cfg.max_upload_mb << 20;
+    let max = crate::limits::bytes(state.cfg.max_file_mb);
     let (mut owner, mut slug) = (String::new(), String::new());
     let mut saved: Option<(std::path::PathBuf, String, String)> = None; // (path, kind, original name)
     let result: ApiResult<()> = async {
         while let Some(mut field) = form.next_field().await.map_err(|e| {
-            if e.status() == StatusCode::PAYLOAD_TOO_LARGE { too_large(state.cfg.max_upload_mb) } else { AppError::bad_request(e.to_string()) }
+            if e.status() == StatusCode::PAYLOAD_TOO_LARGE { too_large(state.cfg.max_file_mb) } else { AppError::bad_request(e.to_string()) }
         })? {
             match field.name() {
                 Some("owner") => owner = field.text().await.map_err(|e| AppError::bad_request(e.to_string()))?,
@@ -63,11 +63,11 @@ async fn import(State(state): State<AppState>, user: CurrentUser, mut form: Mult
                     let mut file = tokio::fs::File::create(&path).await?;
                     let mut written = 0u64;
                     while let Some(chunk) = field.chunk().await.map_err(|e| {
-                        if e.status() == StatusCode::PAYLOAD_TOO_LARGE { too_large(state.cfg.max_upload_mb) } else { AppError::bad_request(e.to_string()) }
+                        if e.status() == StatusCode::PAYLOAD_TOO_LARGE { too_large(state.cfg.max_file_mb) } else { AppError::bad_request(e.to_string()) }
                     })? {
                         written += chunk.len() as u64;
                         if written > max {
-                            return Err(too_large(state.cfg.max_upload_mb));
+                            return Err(too_large(state.cfg.max_file_mb));
                         }
                         file.write_all(&chunk).await?;
                     }
@@ -91,6 +91,16 @@ async fn import(State(state): State<AppState>, user: CurrentUser, mut form: Mult
     let Some((path, kind, original)) = saved.clone() else {
         return Err(AppError::bad_request("attach a .kim or .ifc file"));
     };
+    // Only someone allowed to use the account learns whether it has room.
+    let size = tokio::fs::metadata(&path).await?.len();
+    let fits = async {
+        let account = new_project_owner(&state, &user, &owner).await?;
+        crate::limits::check_fits(&state, account, size).await
+    };
+    if let Err(e) = fits.await {
+        cleanup(&saved);
+        return Err(e);
+    }
     let project = match create_project(&state, &user, &NewProject { owner, slug, description: String::new(), visibility: "private".into() }).await {
         Ok(p) => p,
         Err(e) => {
@@ -98,17 +108,14 @@ async fn import(State(state): State<AppState>, user: CurrentUser, mut form: Mult
             return Err(e);
         }
     };
-    let (name, email): (String, String) = sqlx::query_as("SELECT a.display_name, u.email FROM users u JOIN accounts a ON a.id = u.account_id WHERE u.account_id = $1")
-        .bind(user.id)
-        .fetch_one(&state.db)
-        .await?;
+    let (name, email) = crate::auth::commit_identity(&state.db, user.id).await?;
     let upload = path.file_name().unwrap().to_string_lossy().to_string();
     // The project exists now: the file moves under it, where only that project's job can reach it.
     let stored = crate::repos::uploads_dir(&state.cfg, project.id);
     tokio::fs::create_dir_all(&stored).await?;
     tokio::fs::rename(&path, stored.join(&upload)).await?;
     let job = if kind == "kim" {
-        jobs::enqueue(&state.db, project.id, "import_kim", json!({"upload": upload, "max_bytes": max.saturating_mul(20), "by": user.id}), None).await?
+        jobs::enqueue(&state.db, project.id, "import_kim", json!({"upload": upload, "max_bytes": crate::limits::bytes(state.cfg.max_repo_mb), "by": user.id}), None).await?
     } else {
         jobs::enqueue(
             &state.db,

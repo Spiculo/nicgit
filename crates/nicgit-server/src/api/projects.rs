@@ -51,23 +51,29 @@ fn check_visibility(v: &str) -> ApiResult<()> {
     }
 }
 
+/// The account a new project would belong to, when this user may create projects for it.
+pub async fn new_project_owner(state: &AppState, user: &CurrentUser, slug: &str) -> ApiResult<Uuid> {
+    let owner: Option<(Uuid, String)> = sqlx::query_as("SELECT id, kind FROM accounts WHERE slug = $1").bind(slug).fetch_optional(&state.db).await?;
+    let (owner_id, kind) = owner.ok_or_else(AppError::not_found)?;
+    let allowed = if kind == "user" {
+        owner_id == user.id
+    } else {
+        org_role(state, slug, Some(user.id)).await?.1.is_some_and(|r| r >= Role::Lead)
+    };
+    if !allowed {
+        return Err(AppError::forbidden("you cannot create projects for this account"));
+    }
+    Ok(owner_id)
+}
+
 /// Create a project row and its repository. Shared with imports (uploads).
 pub async fn create_project(state: &AppState, user: &CurrentUser, b: &NewProject) -> ApiResult<Project> {
     if !nicgit_core::names::valid_slug(&b.slug) {
         return Err(AppError::bad_request("project names use lowercase letters, digits, '-', '_' or '.'"));
     }
     check_visibility(&b.visibility)?;
-    let owner: Option<(Uuid, String)> =
-        sqlx::query_as("SELECT id, kind FROM accounts WHERE slug = $1").bind(&b.owner).fetch_optional(&state.db).await?;
-    let (owner_id, kind) = owner.ok_or_else(AppError::not_found)?;
-    let allowed = if kind == "user" {
-        owner_id == user.id
-    } else {
-        org_role(state, &b.owner, Some(user.id)).await?.1.is_some_and(|r| r >= Role::Lead)
-    };
-    if !allowed {
-        return Err(AppError::forbidden("you cannot create projects for this account"));
-    }
+    let owner_id = new_project_owner(state, user, &b.owner).await?;
+    crate::limits::check_new_project(state, owner_id).await?;
     let id = Uuid::new_v4();
     let r = sqlx::query(
         "INSERT INTO projects (id, owner_id, slug, description, visibility) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",

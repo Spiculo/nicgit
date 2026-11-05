@@ -20,22 +20,25 @@ pub mod transfer;
 pub mod versions;
 pub mod views;
 
-pub fn router(max_upload_mb: u64) -> Router<AppState> {
+/// What engine workers use. Served on its own address, which is never published (decision N35).
+pub fn internal_router() -> Router<AppState> {
+    Router::new().merge(internal::router()).merge(job_files::router())
+}
+
+pub fn router(max_file_mb: u64) -> Router<AppState> {
     Router::new()
         .merge(auth::router())
         .merge(google::router())
         .merge(orgs::router())
         .merge(projects::router())
         .merge(versions::router())
-        .merge(internal::router())
-        .merge(job_files::router())
         .merge(jobs::router())
         .merge(views::router())
         .merge(proposals::router())
         .merge(rules::router())
         .merge(issues::router())
         .merge(milestones::router())
-        .merge(transfer::router(max_upload_mb))
+        .merge(transfer::router(max_file_mb))
         .merge(inbox::router())
         .merge(accounts::router())
 }

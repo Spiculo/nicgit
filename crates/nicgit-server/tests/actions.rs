@@ -72,10 +72,12 @@ async fn finished_checks_meter_action_seconds() {
     let (app, alice, _src, _url) = setup().await;
     wait_jobs(&app, "checks", 1).await;
     let job = app.claim(&["checks"]).await;
-    assert_eq!(app.finish(&job, json!({"result": {"checks": [], "passed": true, "seconds": 3.2}})).await, 200);
+    sqlx::query("UPDATE jobs SET started_at = now() - interval '3.2 seconds' WHERE id = $1::uuid").bind(job["id"].as_str().unwrap()).execute(&app.db).await.unwrap();
+    // The server's clock is what counts, whatever the job says about itself.
+    assert_eq!(app.finish(&job, json!({"result": {"checks": [], "passed": true, "seconds": 999999.0}})).await, 200);
     let usage: Value = alice.get(app.url("/api/accounts/alice/usage")).send().await.unwrap().json().await.unwrap();
     let a = usage["usage"].as_array().unwrap().iter().find(|u| u["kind"] == "action_seconds").unwrap();
-    assert_eq!(a["quantity"], 4);
+    assert!((4..=9).contains(&a["quantity"].as_i64().unwrap()), "{a}");
     let v: Value = alice.get(app.url("/api/projects/alice/house/versions/main/checks?names=schema")).send().await.unwrap().json().await.unwrap();
     assert_eq!(v["passed"], true);
 }

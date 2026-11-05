@@ -29,7 +29,13 @@ services:
       NICGIT_SITE_ADMIN_EMAIL: ${NICGIT_SITE_ADMIN_EMAIL:-}
       NICGIT_AI_ROUTER_URL: ${NICGIT_AI_ROUTER_URL:-}
       NICGIT_AI_ROUTER_KEY: ${NICGIT_AI_ROUTER_KEY:-}
-      NICGIT_MAX_UPLOAD_MB: ${NICGIT_MAX_UPLOAD_MB:-2048}
+      NICGIT_MAX_FILE_MB: ${NICGIT_MAX_FILE_MB:-512}
+      NICGIT_MAX_REPO_MB: ${NICGIT_MAX_REPO_MB:-2048}
+      NICGIT_MAX_ACCOUNT_MB: ${NICGIT_MAX_ACCOUNT_MB:-5120}
+      NICGIT_MAX_PROJECTS: ${NICGIT_MAX_PROJECTS:-100}
+      NICGIT_MAX_ORGS: ${NICGIT_MAX_ORGS:-3}
+      # The workers' API. Only port 3000 is published: this one is reachable from the workers' network alone.
+      NICGIT_INTERNAL_BIND: 0.0.0.0:3001
     volumes: [data:/var/lib/nicgit/data]
     ports: ["${NICGIT_PORT:-3000}:3000"]
     networks: [db, workers, public]
@@ -45,8 +51,11 @@ services:
       dockerfile: deploy/Dockerfile.worker
       additional_contexts: { kimcad: ../../kimcad }
     environment:
-      NICGIT_URL: http://server:3000
+      NICGIT_URL: http://server:3001
       NICGIT_WORKER_TOKEN: ${NICGIT_WORKER_TOKEN}
+      NICGIT_JOB_TIMEOUT_MINUTES: ${NICGIT_JOB_TIMEOUT_MINUTES:-60}
+      # Everything else in this container belongs to a job, and goes when the job ends.
+      NICGIT_WORKER_CONTAINED: "1"
       TMPDIR: /work
     # Each job's temporary copy. Removed after every job; the rest of the filesystem is read-only.
     volumes: [/work]

@@ -10,6 +10,13 @@ pub const PAT_PREFIX: &str = "ngp_";
 pub const SESSION_DAYS: i64 = 30;
 
 /// Hex SHA-256: how session and access tokens are stored.
+/// The name and address on commits NicGit makes for a person. History can be public and cannot be changed
+/// later, so it never carries their real address (decision N34).
+pub async fn commit_identity(db: &sqlx::PgPool, user: uuid::Uuid) -> Result<(String, String), sqlx::Error> {
+    let name: String = sqlx::query_scalar("SELECT display_name FROM accounts WHERE id = $1").bind(user).fetch_one(db).await?;
+    Ok((name, format!("{user}@users.noreply.nicgit")))
+}
+
 pub fn sha256_hex(s: &str) -> String {
     hex::encode(Sha256::digest(s.as_bytes()))
 }

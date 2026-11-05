@@ -76,9 +76,51 @@ async fn me(State(state): State<AppState>, user: CurrentUser) -> ApiResult<Json<
 struct MeUpdate {
     display_name: Option<String>,
     lang: Option<String>,
+    slug: Option<String>,
+}
+
+/// Names an account has given up stay reserved, so this bounds how many one person can take out of use.
+const MAX_RETIRED_SLUGS: i64 = 3;
+
+/// Change a user name. Projects keep working because everything refers to the account's id, but addresses
+/// under the old name stop, and nobody else can ever take it (decision N34).
+async fn rename(state: &AppState, user: &CurrentUser, slug: &str) -> ApiResult<()> {
+    if slug == user.slug {
+        return Ok(());
+    }
+    if !nicgit_core::names::valid_slug(slug) {
+        return Err(AppError::bad_request("user names use lowercase letters, digits, '-', '_' or '.'"));
+    }
+    let taken = || AppError::conflict("taken", "that name is already in use");
+    let mut tx = state.db.begin().await?;
+    let retired_by: Option<uuid::Uuid> = sqlx::query_scalar("SELECT account_id FROM retired_slugs WHERE slug = $1").bind(slug).fetch_optional(&mut *tx).await?;
+    if retired_by.is_some_and(|by| by != user.id) {
+        return Err(taken());
+    }
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM retired_slugs WHERE account_id = $1").bind(user.id).fetch_one(&mut *tx).await?;
+    if retired_by.is_none() && count >= MAX_RETIRED_SLUGS {
+        return Err(AppError::forbidden("you have changed your user name as many times as allowed"));
+    }
+    sqlx::query("DELETE FROM retired_slugs WHERE slug = $1").bind(slug).execute(&mut *tx).await?;
+    sqlx::query("INSERT INTO retired_slugs (slug, account_id) VALUES ($1, $2)").bind(&user.slug).bind(user.id).execute(&mut *tx).await?;
+    let updated = sqlx::query("UPDATE accounts SET slug = $2 WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM accounts WHERE slug = $2)")
+        .bind(user.id)
+        .bind(slug)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| taken())?;
+    if updated.rows_affected() == 0 {
+        return Err(taken());
+    }
+    audit::record(&mut *tx, Some(user.id), Some(user.id), "user.rename", slug, json!({"from": user.slug})).await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 async fn update_me(State(state): State<AppState>, user: CurrentUser, Json(b): Json<MeUpdate>) -> ApiResult<Json<Value>> {
+    if let Some(slug) = &b.slug {
+        rename(&state, &user, slug).await?;
+    }
     if let Some(lang) = &b.lang {
         if !["en", "es"].contains(&lang.as_str()) {
             return Err(AppError::bad_request("language must be en or es"));

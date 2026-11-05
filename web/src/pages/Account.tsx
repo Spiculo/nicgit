@@ -27,6 +27,9 @@ export function Account() {
   const ai = useApi<{ enabled: boolean; router: boolean }>(me.data ? `/api/accounts/${me.data.slug}/ai` : null)
   const setAi = useAction((enabled: boolean) => api(`/api/accounts/${me.data!.slug}/ai`, { method: 'PUT', json: { enabled } }), [[`/api/accounts/${me.data?.slug}/ai`]])
   const newOrg = useAction((slug: string) => api('/api/orgs', { method: 'POST', json: { slug } }), [['/api/me']])
+  const storage = useApi<{ used: number; limit: number; project_limit: number; file_limit: number }>('/api/me/storage')
+  const [userName, setUserName] = useState<string | null>(null)
+  const rename = useAction((slug: string) => api('/api/me', { method: 'PATCH', json: { slug } }), [['/api/me']])
 
   return (
     <main className="page">
@@ -34,6 +37,30 @@ export function Account() {
       <p>
         {me.data?.display_name} <span className="muted">({me.data?.email})</span>
       </p>
+
+      <section className="stack" style={{ marginTop: '2rem' }}>
+        <h2>{t('account.userName')}</h2>
+        <p className="muted">{t('account.userNameHint')}</p>
+        <form
+          className="row"
+          onSubmit={async (e) => {
+            e.preventDefault()
+            if (userName === null) return
+            await rename.mutateAsync(userName)
+            setUserName(null)
+          }}
+        >
+          <input
+            aria-label={t('account.userName')}
+            value={userName ?? me.data?.slug ?? ''}
+            onChange={(e) => setUserName(e.target.value.toLowerCase())}
+            required
+            style={{ maxWidth: '20rem' }}
+          />
+          <button disabled={userName === null || userName === me.data?.slug}>{t('account.rename')}</button>
+        </form>
+        {rename.error && <p className="error" role="alert">{rename.error.message}</p>}
+      </section>
 
       <section className="stack" style={{ marginTop: '2rem' }}>
         <h2>{t('account.tokens')}</h2>
@@ -126,6 +153,14 @@ export function Account() {
         </form>
         {newOrg.error && <p className="error">{newOrg.error.message}</p>}
       </section>
+
+      {storage.data && (
+        <section className="stack" style={{ marginTop: '2.5rem' }}>
+          <h2>{t('account.storage')}</h2>
+          <p>{t('account.storageUsed', { used: bytes(storage.data.used), limit: bytes(storage.data.limit) })}</p>
+          <p className="muted">{t('account.storageLimits', { project: bytes(storage.data.project_limit), file: bytes(storage.data.file_limit) })}</p>
+        </section>
+      )}
 
       {!!usage.data?.length && (
         <section className="stack" style={{ marginTop: '2.5rem' }}>

@@ -17,6 +17,8 @@ def _git(client, *args: str, cwd: pathlib.Path | None = None) -> str:
     if r.returncode != 0:
         # What a pre-receive hook refused is the useful part; nothing here holds the token.
         lines = [line.removeprefix("remote: ") for line in (r.stderr or "").splitlines() if line.startswith("remote: NicGit:")]
+        # The server can also refuse before git starts, for example when the project is full.
+        lines += [line.split("remote error: ", 1)[1] for line in (r.stderr or "").splitlines() if "remote error: NicGit:" in line]
         raise JobError(" ".join(lines) or f"git {args[0]} failed: {(r.stderr or r.stdout).strip().splitlines()[-1:]}")
     return r.stdout.strip()
 
