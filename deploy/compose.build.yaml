@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Builds the images from source instead of pulling released ones. For development and scripts/stack-check.sh;
+# releases come from scripts/build-images.sh (decision N40).
+#   docker compose -f deploy/compose.yaml -f deploy/compose.build.yaml --env-file deploy/nicgit.env up -d --build
+# NICGIT_SOURCE_CONTEXT is this repository (default ..) and NICGIT_ENGINE_CONTEXT a kimcad checkout (default
+# ../../kimcad), both relative to deploy/. Inside a OneDrive folder on Windows Docker cannot read them: point
+# both at copies made with scripts/snapshot.sh, as scripts/stack-check.sh does.
+services:
+  server:
+    build:
+      context: "${NICGIT_SOURCE_CONTEXT:-..}"
+      dockerfile: deploy/images/Dockerfile.server
+      additional_contexts: { kimcad: "${NICGIT_ENGINE_CONTEXT:-../../kimcad}" }
+      args: { NICGIT_VERSION: "${NICGIT_VERSION}", NICGIT_ENGINE_REV: "${NICGIT_ENGINE_REV:-dev}" }
+  worker:
+    build:
+      context: "${NICGIT_SOURCE_CONTEXT:-..}"
+      dockerfile: deploy/images/Dockerfile.worker
+      additional_contexts: { kimcad: "${NICGIT_ENGINE_CONTEXT:-../../kimcad}" }
+      args: { NICGIT_VERSION: "${NICGIT_VERSION}", NICGIT_ENGINE_REV: "${NICGIT_ENGINE_REV:-dev}" }

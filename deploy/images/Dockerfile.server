@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # NicGit server image: the Rust server, the built web app and git.
-# Build from this repository with the engine checkout as a named context:
-#   docker buildx build -f deploy/Dockerfile.server --build-context kimcad=../kimcad -t nicgit-server .
+# Release builds: scripts/build-images.sh (this repository as committed, the engine at the commit in engine.rev).
+# By hand, from this repository with an engine checkout as a named context:
+#   docker buildx build -f deploy/images/Dockerfile.server --build-context kimcad=../kimcad -t nicgit-server .
 FROM node:22-bookworm-slim AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
@@ -15,9 +16,14 @@ COPY --from=kimcad crates /src/kimcad/crates
 COPY --from=kimcad Cargo.toml /src/kimcad/Cargo.toml
 COPY Cargo.toml Cargo.lock* ./
 COPY crates ./crates
-RUN cargo build --release -p nicgit-server
+# The engine commit, compiled in and reported at /api/instance so clients can tell which record format this speaks.
+ARG NICGIT_ENGINE_REV=dev
+RUN NICGIT_ENGINE_REV="$NICGIT_ENGINE_REV" cargo build --release -p nicgit-server
 
 FROM debian:bookworm-slim
+ARG NICGIT_VERSION=dev
+ARG NICGIT_ENGINE_REV=dev
+LABEL org.opencontainers.image.title="nicgit-server" org.opencontainers.image.version="$NICGIT_VERSION"       org.opencontainers.image.licenses="AGPL-3.0-or-later" dev.nicgit.engine.revision="$NICGIT_ENGINE_REV"
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/* \
  && useradd --system --home /var/lib/nicgit --create-home nicgit \
  && install -d -o nicgit -g nicgit /var/lib/nicgit/data

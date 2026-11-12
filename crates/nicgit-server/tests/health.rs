@@ -9,6 +9,20 @@ async fn health_is_ok() {
 }
 
 #[tokio::test]
+async fn instance_says_what_this_server_is() {
+    let app = common::TestApp::spawn_with(|c| {
+        c.deployment = nicgit_server::config::Deployment::SelfHosted;
+        c.signup.open = false;
+    })
+    .await;
+    let v: serde_json::Value = app.client.get(app.url("/api/instance")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(v["deployment"], "self-hosted");
+    assert_eq!(v["signup"], "closed");
+    assert_eq!(v["version"], env!("CARGO_PKG_VERSION"));
+    assert!(v["engine"].is_string());
+}
+
+#[tokio::test]
 async fn serves_the_web_app_with_history_fallback() {
     let web = tempfile::tempdir().unwrap();
     std::fs::write(web.path().join("index.html"), "<!doctype html><title>NicGit</title>").unwrap();

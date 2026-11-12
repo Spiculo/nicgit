@@ -3,6 +3,7 @@
 mod common;
 use axum::{extract::State, routing::post, Form, Json, Router};
 use base64::Engine;
+use nicgit_server::config::Signup;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -22,6 +23,15 @@ async fn token(State(m): State<Mock>, Form(form): Form<HashMap<String, String>>)
 }
 
 async fn setup(admin: Option<&str>) -> (common::TestApp, Mock) {
+    setup_signup(admin, Signup { open: true, domains: vec![] }).await
+}
+
+/// A server whose sign-up is closed except for `domains` (a self-hosted studio's server).
+async fn setup_closed(admin: Option<&str>, domains: &[&str]) -> (common::TestApp, Mock) {
+    setup_signup(admin, Signup { open: false, domains: domains.iter().map(|d| d.to_string()).collect() }).await
+}
+
+async fn setup_signup(admin: Option<&str>, signup: Signup) -> (common::TestApp, Mock) {
     let mock = Mock::default();
     let router = Router::new().route("/token", post(token)).with_state(mock.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -34,6 +44,7 @@ async fn setup(admin: Option<&str>) -> (common::TestApp, Mock) {
         cfg.google_auth_url = "https://google.test/auth".into();
         cfg.google_token_url = format!("http://{addr}/token");
         cfg.site_admin_email = admin;
+        cfg.signup = signup;
     })
     .await;
     (app, mock)
@@ -359,4 +370,40 @@ async fn pat_still_works_for_git_style_auth() {
     let token = app.token(&c).await;
     let r = reqwest::Client::new().get(app.url("/api/me")).basic_auth("ana", Some(&token)).send().await.unwrap();
     assert_eq!(r.status(), 200);
+}
+
+#[tokio::test]
+async fn closed_signup_refuses_strangers_and_makes_no_account() {
+    let (app, mock) = setup_closed(None, &["studio.example"]).await;
+    let c = browser();
+    assert_eq!(sign_in(&app, &mock, &c, good_claims("s1", "ana@gmail.com")).await, "/login?error=signup_closed");
+    let users: i64 = sqlx::query_scalar("SELECT count(*) FROM users").fetch_one(&app.db).await.unwrap();
+    assert_eq!(users, 0);
+}
+
+#[tokio::test]
+async fn closed_signup_admits_the_studio_domain() {
+    let (app, mock) = setup_closed(None, &["studio.example"]).await;
+    let c = browser();
+    assert_eq!(sign_in(&app, &mock, &c, good_claims("s1", "Ana@Studio.example")).await, "/");
+    assert_eq!(me(&app, &c).await["email"], "ana@studio.example");
+}
+
+#[tokio::test]
+async fn closed_signup_admits_the_site_admin() {
+    let (app, mock) = setup_closed(Some("boss@gmail.com"), &[]).await;
+    let c = browser();
+    assert_eq!(sign_in(&app, &mock, &c, good_claims("s1", "boss@gmail.com")).await, "/");
+}
+
+#[tokio::test]
+async fn closed_signup_lets_existing_accounts_in() {
+    let (app, mock) = setup_closed(None, &[]).await;
+    // Made by an admin outside Google (the dev-user command): it links on first sign-in.
+    app.user("ana").await;
+    let c = browser();
+    assert_eq!(sign_in(&app, &mock, &c, good_claims("s1", "ana@example.com")).await, "/");
+    // And signs in again by its Google identity.
+    let again = browser();
+    assert_eq!(sign_in(&app, &mock, &again, good_claims("s1", "ana@example.com")).await, "/");
 }

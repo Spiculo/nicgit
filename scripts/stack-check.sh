@@ -1,17 +1,29 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Proves the production compose stack: builds it, runs the whole flow against the real containers (scripts/e2e.py),
-# and tries from inside a worker everything a compromised job would try (decision N30). Everything runs under its
-# own compose project and is removed at the end, volumes included, so it never touches a real deployment.
+# Proves the production compose stack, as a self-hosted server: builds it from this working tree and the kimcad
+# working tree as they are (uncommitted changes included, through scripts/snapshot.sh), runs the whole
+# flow against the real containers (scripts/e2e.py), and tries from inside a worker everything a compromised job
+# would try (decision N30). Everything runs under its own compose project and is removed at the end, volumes
+# included, so it never touches a real deployment.
 # Needs Docker, a kimcad checkout next to this one, and its M5 fixture (`pixi run m5` in kimcad).
 #   KEEP=1 ./scripts/stack-check.sh    leaves the stack running afterwards
 set -e
 here="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$here"
 kim="${KIMBIM_HOME:-$here/../kimcad}"
+# Docker on Windows needs Windows paths, not Git Bash ones.
+native() { case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) cygpath -w "$1" ;; *) printf '%s\n' "$1" ;; esac; }
 port="${STACK_PORT:-3200}"
 env_file="$(mktemp)"
+src="$(mktemp -d)"
+"$here/scripts/snapshot.sh" "$here" --work "$src/nicgit"
+"$here/scripts/snapshot.sh" "$kim" --work "$src/kimcad"
 cat > "$env_file" <<EOF
+NICGIT_DEPLOYMENT=self-hosted
+NICGIT_VERSION=stack-check
+NICGIT_IMAGE_PREFIX=nicgit-stackcheck
+NICGIT_SOURCE_CONTEXT=$(native "$src/nicgit")
+NICGIT_ENGINE_CONTEXT=$(native "$src/kimcad")
 NICGIT_DB_PASSWORD=stack-check-db-$$
 NICGIT_WORKER_TOKEN=stack-check-pool-$$
 NICGIT_PUBLIC_URL=http://localhost:$port
@@ -19,7 +31,7 @@ NICGIT_PORT=$port
 NICGIT_WORKERS=2
 NICGIT_WORKER_MEMORY=4g
 EOF
-dc() { docker compose -p nicgit-stackcheck -f deploy/compose.yaml --env-file "$env_file" "$@"; }
+dc() { docker compose -p nicgit-stackcheck -f deploy/compose.yaml -f deploy/compose.build.yaml --env-file "$env_file" "$@"; }
 cleanup() {
   status=$?
   if [ "$status" -ne 0 ]; then
@@ -27,13 +39,13 @@ cleanup() {
     echo "--- worker log"; dc logs --tail 40 worker 2>&1 | cut -c1-240 || true
   fi
   if [ "${KEEP:-0}" != 1 ]; then dc down -v --remove-orphans >/dev/null 2>&1 || true; fi
-  rm -f "$env_file"
+  rm -rf "$env_file" "$src"
   exit "$status"
 }
 trap cleanup EXIT INT TERM
 
 echo "== build and start"
-dc up -d --build --quiet-pull 2>&1 | tail -3
+dc up -d --build --quiet-pull > "$src/up.log" 2>&1 || { tail -40 "$src/up.log"; echo "FAIL: the stack did not build or start"; exit 1; }
 i=0
 until curl -sf "http://localhost:$port/api/health" >/dev/null; do
   i=$((i + 1))

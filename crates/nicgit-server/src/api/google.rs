@@ -185,7 +185,8 @@ fn server_error<E: std::fmt::Display>(e: E) -> &'static str {
     "server"
 }
 
-/// The account for this Google identity: known by `sub`, else linked by verified email, else new.
+/// The account for this Google identity: known by `sub`, else linked by verified email, else new when this
+/// server lets that address join (decision N39).
 async fn account(state: &AppState, who: &Identity) -> Result<Uuid, &'static str> {
     let admin = is_admin(state, &who.email);
     let mut tx = state.db.begin().await.map_err(server_error)?;
@@ -215,6 +216,7 @@ async fn account(state: &AppState, who: &Identity) -> Result<Uuid, &'static str>
                 sqlx::query("UPDATE users SET google_sub = $2 WHERE account_id = $1").bind(id).bind(&who.sub).execute(&mut *tx).await.map_err(server_error)?;
                 (id, false)
             }
+            None if !state.cfg.signup.allows(&who.email, admin) => return Err("signup_closed"),
             None => (create(&mut tx, who).await?, true),
         }
     };

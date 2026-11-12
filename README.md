@@ -10,7 +10,11 @@ The forge for NicBim (KimBim) projects: a git server and a web app where archite
 - **Actions** (the engine's schema, IDS, clash and model checks) and **AI** summaries through the AI router, both metered and capped by budgets.
 - Private by default; a project you cannot read does not exist for you (404 everywhere).
 
-Design: [docs/superpowers/specs/2026-11-03-nicgit-design.md](docs/superpowers/specs/2026-11-03-nicgit-design.md). Decisions: [docs/decisions.md](docs/decisions.md). Next: [docs/future-work.md](docs/future-work.md). Operating it: [docs/ops.md](docs/ops.md). AI router contract: [docs/ai-router.md](docs/ai-router.md).
+Design: [docs/superpowers/specs/2026-11-03-nicgit-design.md](docs/superpowers/specs/2026-11-03-nicgit-design.md). Decisions: [docs/decisions.md](docs/decisions.md). Next: [docs/future-work.md](docs/future-work.md). AI router contract: [docs/ai-router.md](docs/ai-router.md). Changes: [CHANGELOG.md](CHANGELOG.md).
+
+## Deploy
+
+One build runs two ways ([docs/deployment.md](docs/deployment.md)): our **hosted** service, open to anyone, and **self-hosted** servers that a studio runs on premises or on its own cloud for its own people. Studios: [docs/self-hosting.md](docs/self-hosting.md). Our service: [docs/hosting.md](docs/hosting.md). Reference for both: [docs/ops.md](docs/ops.md).
 
 ## Layout
 
@@ -19,11 +23,12 @@ crates/nicgit-core     roles, names, conflict policy, approval rules (pure, unit
 crates/nicgit-server   Rust server (axum, sqlx/Postgres): API, auth, git smart HTTP, hooks, jobs, metering, AI
 workers/engine         Python engine worker: KimBim engine jobs (diff, merge, export, import, checks)
 web                    React + TypeScript app, 3D with web-ifc + three.js
-deploy                 container images and compose files
-scripts                dev stack, demo data, end-to-end test
+deploy                 the compose stack both deployments run, env examples, Dockerfiles (deploy/images)
+scripts                dev stack, demo data, end-to-end test, release images
+engine.rev             the kimcad commit release images are built with
 ```
 
-The engine is the KimBim checkout next to this one (`../kimcad`; override with `KIMBIM_HOME`). The server links its `kimbim-repo` crate; the worker imports its Python package and runs in its pixi environment.
+The engine is the KimBim checkout next to this one (`../kimcad`; override with `KIMBIM_HOME`). The server links its `kimbim-repo` crate; the worker imports its Python package and runs in its pixi environment. Development uses that checkout as it is; releases use the commit in `engine.rev`.
 
 ## Develop
 

@@ -9,6 +9,7 @@ const ERRORS = {
   token: 'auth.error.token',
   unverified: 'auth.error.unverified',
   conflict: 'auth.error.conflict',
+  signup_closed: 'auth.error.signupClosed',
   not_configured: 'auth.error.notConfigured',
   server: 'auth.error.server',
 } as const

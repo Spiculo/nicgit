@@ -19,6 +19,7 @@ export const es: Record<Key, string> = {
   'auth.error.token': 'No se pudo aceptar la respuesta de Google. Vuelve a intentarlo.',
   'auth.error.unverified': 'El correo de tu cuenta de Google no está verificado. Verifícalo en Google y vuelve a intentarlo.',
   'auth.error.conflict': 'Ese correo ya pertenece a otra cuenta.',
+  'auth.error.signupClosed': 'Este servidor solo admite a su propia gente. Pide a su administrador que permita unirse a tu dirección.',
   'auth.error.notConfigured': 'El inicio de sesión con Google todavía no está configurado en este servidor.',
   'auth.error.server': 'Algo salió mal al iniciar sesión. Vuelve a intentarlo.',
   'auth.slug': 'Nombre de usuario',

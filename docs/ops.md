@@ -13,14 +13,16 @@
 
 ## Deploy with compose
 
+The same stack runs both deployments; follow [self-hosting.md](self-hosting.md) for a studio's server or [hosting.md](hosting.md) for ours, and [deployment.md](deployment.md) for what differs between them and how releases are built.
+
 ```bash
-cp deploy/nicgit.env.example deploy/nicgit.env      # fill it in
-docker compose -f deploy/compose.yaml --env-file deploy/nicgit.env up -d --build
+cp deploy/self-hosted.env.example deploy/nicgit.env   # or deploy/hosted.env.example; fill it in
+docker compose -f deploy/compose.yaml --env-file deploy/nicgit.env up -d
 ```
 
-The images build from this repository with the kimcad checkout as a second build context (`../../kimcad` from `deploy/`). Put a TLS-terminating proxy (Caddy, nginx, Traefik) in front of port 3000 and set `NICGIT_PUBLIC_URL` to the `https://` address so session cookies are marked secure.
+`deploy/compose.yaml` runs released images (`NICGIT_VERSION`, `NICGIT_IMAGE_PREFIX`). To build them from this working tree and a kimcad checkout instead, add `-f deploy/compose.build.yaml` and `--build`. Put a TLS-terminating proxy (Caddy, nginx, Traefik) in front of port 3000 and set `NICGIT_PUBLIC_URL` to the `https://` address so session cookies are marked secure.
 
-**Sign-in.** Create an OAuth client in Google Cloud Console (type "Web application") that allows `<NICGIT_PUBLIC_URL>/api/auth/google/callback`, and set `NICGIT_GOOGLE_CLIENT_ID` and `NICGIT_GOOGLE_CLIENT_SECRET`. Anyone with a Google account can then join. Google is the only sign-in, on premises too, so the server and its users must be able to reach Google (decision N28). Git and NicBim use personal access tokens.
+**Sign-in.** Create an OAuth client in Google Cloud Console (type "Web application") that allows `<NICGIT_PUBLIC_URL>/api/auth/google/callback`, and set `NICGIT_GOOGLE_CLIENT_ID` and `NICGIT_GOOGLE_CLIENT_SECRET`. Google is the only sign-in, on premises too, so the server and its users must be able to reach Google (decision N28). Who may create an account depends on the deployment (`NICGIT_SIGNUP`, decision N39). Git and NicBim use personal access tokens.
 
 The Google account whose verified email equals `NICGIT_SITE_ADMIN_EMAIL` is the site admin; removing it from the configuration demotes them at the next start. Site admins get **no** access to customers' private projects.
 
@@ -30,6 +32,9 @@ The Google account whose verified email equals `NICGIT_SITE_ADMIN_EMAIL` is the 
 
 | Variable | Default | |
 |---|---|---|
+| `NICGIT_DEPLOYMENT` | required | `hosted` or `self-hosted` ([deployment.md](deployment.md)) |
+| `NICGIT_SIGNUP` | `open` when hosted, `closed` when self-hosted | `closed`: new accounts only for the site admin and `NICGIT_SIGNUP_DOMAINS` |
+| `NICGIT_SIGNUP_DOMAINS` | unset | comma list of email domains that may join a closed server (exact domain) |
 | `NICGIT_DATABASE_URL` | `postgres://nicgit:nicgit@127.0.0.1:5434/nicgit` | migrations run at start |
 | `NICGIT_DATA_DIR` | `data` | repositories, caches, uploads |
 | `NICGIT_BIND` | `127.0.0.1:3000` | the public address |
@@ -51,7 +56,7 @@ Workers: `NICGIT_URL` (the internal address), `NICGIT_WORKER_TOKEN`, `NICGIT_JOB
 
 ## Limits
 
-Anyone can sign up, so what one person can store is limited (decision N33). When a project or account is full:
+What one person can store is limited (decision N33): on the hosted service because anyone can sign up, on a self-hosted one against mistakes. When a project or account is full:
 
 - Pushes are refused, with the reason shown by git. A push that does not fit in the room left fails with git's `pack exceeds maximum allowed size`.
 - Reading, cloning and finishing a Combine still work.

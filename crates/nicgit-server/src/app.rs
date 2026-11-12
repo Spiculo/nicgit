@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use crate::config::Config;
-use axum::{routing::get, Json, Router};
+use axum::{extract::State, routing::get, Json, Router};
 use tower_http::services::{ServeDir, ServeFile};
 use serde_json::{json, Value};
 use sqlx::PgPool;
@@ -29,6 +29,7 @@ pub async fn build(cfg: Arc<Config>) -> anyhow::Result<(Routers, AppState)> {
     let state = AppState { db, cfg };
     let mut public = Router::new()
         .route("/api/health", get(health))
+        .route("/api/instance", get(instance))
         .merge(crate::api::router(state.cfg.max_file_mb))
         .merge(crate::git::http::router())
         .route("/api/{*rest}", axum::routing::any(api_not_found))
@@ -44,6 +45,17 @@ pub async fn build(cfg: Arc<Config>) -> anyhow::Result<(Routers, AppState)> {
 
 async fn health() -> Json<Value> {
     Json(json!({"ok": true, "version": env!("CARGO_PKG_VERSION")}))
+}
+
+/// What this server is, for the web app and the desktop app: which deployment, who may join, and the exact
+/// engine it was built with, so a client can tell whether it speaks the same record format (docs/deployment.md).
+async fn instance(State(state): State<AppState>) -> Json<Value> {
+    Json(json!({
+        "deployment": state.cfg.deployment.name(),
+        "signup": if state.cfg.signup.open { "open" } else { "closed" },
+        "version": env!("CARGO_PKG_VERSION"),
+        "engine": option_env!("NICGIT_ENGINE_REV").unwrap_or("dev"),
+    }))
 }
 
 async fn api_not_found() -> crate::error::AppError {

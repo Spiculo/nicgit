@@ -17,6 +17,7 @@ export const en = {
   'auth.error.token': "Google's answer could not be accepted. Please try again.",
   'auth.error.unverified': "Your Google account's email address is not verified. Verify it at Google, then try again.",
   'auth.error.conflict': 'That email address already belongs to another account.',
+  'auth.error.signupClosed': 'This server only admits its own people. Ask its administrator to let your address join.',
   'auth.error.notConfigured': 'Sign-in with Google is not set up on this server yet.',
   'auth.error.server': 'Something went wrong while signing in. Please try again.',
   'auth.slug': 'User name',

@@ -65,6 +65,19 @@ Customer workflows defined in the project (file location inside the tree to be a
 - **Notifications by email** and **webhooks**.
 - **Comments pinned in 3D** on proposals: comments accept a pin (elements, viewpoint) through the API; the web app does not place them yet.
 
+## Two deployments (docs/deployment.md)
+
+What is still missing for a studio to run its own server, and for the hosted service to grow, in rough order:
+
+- **Published images**: a registry, a release workflow that runs the tests against `engine.rev` and pushes tagged images, signatures (N44).
+- **Invitations**, so a closed server can admit one consultant without opening its domain list; an admin page for who joined.
+- **Email by SMTP** on self-hosted servers next to Postmark on ours (N29).
+- **OIDC sign-in** (Microsoft Entra, Google Workspace, Keycloak) for studios not on Google (N45).
+- **Engine compatibility checks**: workers report their engine commit when claiming and the server refuses a mismatch; the desktop app reads `/api/instance` and warns when its record format differs.
+- **Per-deployment limits**: `0` for "no limit" so a self-hosted server need not invent numbers.
+- **Self-hosted licensing and usage reporting**, once N42/N43 are decided.
+- **Hosted at scale**: Postgres row-level security (N9), object storage, a split git role (N32), Helm/Kubernetes manifests in the private infrastructure.
+
 ## Platform
 
 - SSH git transport; OIDC/SAML SSO for offices; LDAP for on-prem.
@@ -72,5 +85,5 @@ Customer workflows defined in the project (file location inside the tree to be a
 - Webhooks and a public REST API with tokens; NicGit MCP endpoint for agents (open proposals, read reviews).
 - App integration: "Open in NicGit", proposals and reviews inside the desktop app, sign in once.
 - Federation of discipline models (kimcad `docs/08`), real-time co-editing presence.
-- Separate infra repository once `deploy/` grows.
+- The hosted service's private infrastructure repository (N41).
 - Mirroring to/from other git hosts.

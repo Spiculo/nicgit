@@ -1,0 +1,4 @@
+# The kimcad (NicBim engine) commit that release images are built with and that this NicGit version is tested
+# against (decision N40). scripts/build-images.sh reads the first 40-hex line. Development builds use whatever
+# the ../kimcad checkout has; scripts/dev.sh says when that is not this commit.
+f093285bce2f2055b192a24cb3516f9cbfa5dbea
