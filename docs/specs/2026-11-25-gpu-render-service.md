@@ -85,7 +85,9 @@ The CLI can run in CI: `--json` prints machine-readable output and exit codes ar
 
 ## 4. CLI contract
 
-Command group: **`nicbim render`** (the CLI already owns the project, cameras and materials).
+Command group: **`nicbim render`** (the CLI already owns the project, cameras and materials). Today the
+binary is `kimbim`; this spec uses the target name `nicbim`, with `kimbim` as an alias until the code
+rename (NicBim H1 item 8).
 It talks to NicGit with a personal access token, like `kimbim versions push`.
 
 ```bash
