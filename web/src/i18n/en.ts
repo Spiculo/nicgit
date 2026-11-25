@@ -108,8 +108,8 @@ export const en = {
   'compare.other': '{n} other records changed (relationships, shared values)',
   'compare.protected': 'Affects deliverables',
 
-  'proposals.title': 'Proposals',
-  'proposals.new': 'New proposal',
+  'proposals.title': 'Pull requests',
+  'proposals.new': 'New pull request',
   'proposals.empty': 'No proposals. A proposal asks to combine one design option into another.',
   'proposals.open': 'Open',
   'proposals.combined': 'Combined',

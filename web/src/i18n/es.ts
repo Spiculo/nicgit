@@ -109,8 +109,8 @@ export const es: Record<Key, string> = {
   'compare.other': '{n} registros más cambiaron (relaciones, valores compartidos)',
   'compare.protected': 'Afecta a los entregables',
 
-  'proposals.title': 'Propuestas',
-  'proposals.new': 'Nueva propuesta',
+  'proposals.title': 'Solicitudes',
+  'proposals.new': 'Nueva solicitud',
   'proposals.empty': 'No hay propuestas. Una propuesta pide combinar una opción de diseño con otra.',
   'proposals.open': 'Abiertas',
   'proposals.combined': 'Combinadas',
