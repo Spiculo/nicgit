@@ -32,6 +32,7 @@ export NICGIT_INTERNAL_BIND=127.0.0.1:3001
 export NICGIT_PUBLIC_URL=http://127.0.0.1:3000
 export NICGIT_SIGNUP_DOMAINS=example.com
 export NICGIT_SERVER_BIN="$here/target/debug/nicgit-server"
+export NICGIT_ENGINE_REV="$(grep -E '^[0-9a-f]{40}$' engine.rev | head -1)"
 
 cargo build -q -p nicgit-server
 nohup "$NICGIT_SERVER_BIN" > data/server.log 2>&1 &
