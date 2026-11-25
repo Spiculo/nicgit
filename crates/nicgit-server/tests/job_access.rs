@@ -149,10 +149,10 @@ fn fetch_plan_by_kind() {
     assert_eq!(jobs::fetch_plan("compare", &json!({"from": a, "to": b})), commits(json!([a, b]), 1));
     assert_eq!(jobs::fetch_plan("settings_diff", &json!({"from": a, "to": b})), commits(json!([a, b]), 1));
     assert_eq!(jobs::fetch_plan("compare", &json!({"from": a, "to": a})), commits(json!([a]), 1));
-    for kind in ["merge_preview", "combine", "element_history", "export_kim", "import_ifc"] {
+    for kind in ["merge_preview", "combine", "element_history", "export_nic", "import_ifc"] {
         assert_eq!(jobs::fetch_plan(kind, &json!({"rev": a})), full, "{kind}");
     }
-    assert_eq!(jobs::fetch_plan("import_kim", &json!({})), json!({"mode": "none"}));
+    assert_eq!(jobs::fetch_plan("import_nic", &json!({})), json!({"mode": "none"}));
     // A name rather than a commit id: fall back to everything rather than fail the job.
     assert_eq!(jobs::fetch_plan("export_ifc", &json!({"rev": "main~1"})), full);
     assert_eq!(jobs::fetch_plan("compare", &json!({"from": a, "to": "main"})), full);
@@ -253,7 +253,7 @@ async fn job_push_does_not_count_as_a_user_push() {
 #[tokio::test]
 async fn import_cannot_overwrite_existing_ref() {
     let f = fixture().await;
-    let job = f.job("import_kim", json!({})).await;
+    let job = f.job("import_nic", json!({})).await;
     let d = clone(&f, &job).await;
     write_record(d.path(), "settings.json", "{\"units\":\"cm\"}");
     git_ok(d.path(), &["commit", "-qam", "imported"]).await;
@@ -272,7 +272,7 @@ async fn invalid_record_push_refused() {
     git_ok(d.path(), &["commit", "-qam", "broken"]).await;
     let out = git(d.path(), &["push", "origin", "HEAD:refs/heads/main"]).await;
     assert!(!out.status.success());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("not valid KimBim JSON"));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("not valid NicBim JSON"));
 }
 
 #[tokio::test]
@@ -437,12 +437,12 @@ async fn combine_result_must_match_target_head() {
 #[tokio::test]
 async fn import_default_option_must_exist() {
     let f = fixture().await;
-    let job = f.job("import_kim", json!({})).await;
+    let job = f.job("import_nic", json!({})).await;
     assert_eq!(f.app.finish(&job, json!({"result": {"default": "does-not-exist", "options": [], "heads": {}}})).await, 200);
     let default: String = sqlx::query_scalar("SELECT default_option FROM projects WHERE id = $1").bind(f.pid).fetch_one(&f.app.db).await.unwrap();
     assert_eq!(default, "main");
 
-    let job = f.job("import_kim", json!({})).await;
+    let job = f.job("import_nic", json!({})).await;
     assert_eq!(f.app.finish(&job, json!({"result": {"default": "other", "options": ["other"], "heads": {}}})).await, 200);
     let default: String = sqlx::query_scalar("SELECT default_option FROM projects WHERE id = $1").bind(f.pid).fetch_one(&f.app.db).await.unwrap();
     assert_eq!(default, "other");

@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# NicGit engine worker: the KimBim engine (Python + IfcOpenShell + the Rust core) and the NicGit job runner.
+# NicGit engine worker: the NicBim engine (Python + IfcOpenShell + the Rust core) and the NicGit job runner.
 # Release builds: scripts/build-images.sh. By hand:
-#   docker buildx build -f deploy/images/Dockerfile.worker --build-context kimcad=../kimcad -t nicgit-worker .
-# It uses kimcad's default pixi environment so the engine runs exactly as it is tested there. A slimmer
+#   docker buildx build -f deploy/images/Dockerfile.worker --build-context nicbim=../nicbim -t nicgit-worker .
+# It uses nicbim's default pixi environment so the engine runs exactly as it is tested there. A slimmer
 # engine-only environment is future work (docs/future-work.md).
 FROM ghcr.io/prefix-dev/pixi:0.81.0 AS build
 # The engine's Rust extension links with the system's toolchain (cc, ar).
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
-WORKDIR /kimcad
-COPY --from=kimcad pixi.toml pixi.lock pyproject.toml Cargo.toml Cargo.lock ./
-COPY --from=kimcad tools/conda_pypi_map.json tools/conda_pypi_map.json
+WORKDIR /nicbim
+COPY --from=nicbim pixi.toml pixi.lock pyproject.toml Cargo.toml Cargo.lock ./
+COPY --from=nicbim tools/conda_pypi_map.json tools/conda_pypi_map.json
 RUN pixi install --locked -e default
-COPY --from=kimcad crates ./crates
-COPY --from=kimcad python ./python
+COPY --from=nicbim crates ./crates
+COPY --from=nicbim python ./python
 RUN pixi run -e default build
 
 FROM debian:bookworm-slim
@@ -23,9 +23,9 @@ RUN useradd --system --home /var/lib/nicgit --create-home nicgit \
  && install -d -o nicgit -g nicgit /work
 # The same path it was built at: conda packages have their prefix compiled in. Moved, the environment's git
 # cannot find its HTTP helper, and every job fails to fetch. That git is the one jobs use.
-COPY --from=build /kimcad/.pixi/envs/default /kimcad/.pixi/envs/default
-COPY --from=build /kimcad/python /opt/kimcad/python
+COPY --from=build /nicbim/.pixi/envs/default /nicbim/.pixi/envs/default
+COPY --from=build /nicbim/python /opt/nicbim/python
 COPY workers/engine/nicgit_worker /opt/nicgit/nicgit_worker
-ENV NICGIT_ENGINE_REV=$NICGIT_ENGINE_REV PATH=/kimcad/.pixi/envs/default/bin:$PATH PYTHONPATH=/opt/kimcad/python:/opt/nicgit PYTHONDONTWRITEBYTECODE=1
+ENV NICGIT_ENGINE_REV=$NICGIT_ENGINE_REV PATH=/nicbim/.pixi/envs/default/bin:$PATH PYTHONPATH=/opt/nicbim/python:/opt/nicgit PYTHONDONTWRITEBYTECODE=1
 USER nicgit
 CMD ["python", "-m", "nicgit_worker"]

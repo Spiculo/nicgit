@@ -136,7 +136,7 @@ export function Account() {
         <ul className="list">
           {me.data?.orgs.map((o) => (
             <li key={o.slug}>
-              <Link to={`/explore`}>{o.display_name}</Link> <span className="muted">{t(`role.${o.role}` as 'role.admin')}</span>
+              <Link to={`/orgs/${o.slug}`}>{o.display_name}</Link> <span className="muted">{t(`role.${o.role}` as 'role.admin')}</span>
             </li>
           ))}
         </ul>

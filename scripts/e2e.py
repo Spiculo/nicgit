@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """End to end against a running NicGit (server + at least one engine worker), stdlib only.
 
-    python scripts/e2e.py http://127.0.0.1:3100 ../kimcad/build/m5/project/.git
+    python scripts/e2e.py http://127.0.0.1:3100 ../nicbim/build/m5/project/.git
 
-Uses the account in NICGIT_E2E_USER and NICGIT_E2E_TOKEN (scripts/e2e.sh makes them), creates a project, pushes KimBim's M5 project with main set back before its combine,
+Uses the account in NICGIT_E2E_USER and NICGIT_E2E_TOKEN (scripts/e2e.sh makes them), creates a project, pushes NicBim's M5 project with main set back before its combine,
 waits for the engine's summaries, compares the options, opens a proposal, combines it taking the source
 option's side of every conflict, and checks the result equals what the engine's own merge gives.
 """

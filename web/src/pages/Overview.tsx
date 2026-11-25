@@ -183,7 +183,7 @@ export function Overview() {
               <a className="btn" href={ctx.api(`/versions/${head.head}/model.ifc`)} download>
                 {t('overview.download')}
               </a>{' '}
-              <JobDownload href={ctx.api(`/export.kim?scope=full`)}>.kim</JobDownload>
+              <JobDownload href={ctx.api(`/export.nic?scope=full`)}>.nic</JobDownload>
             </p>
             <h3>{t('overview.clone')}</h3>
             <code className="small" style={{ overflowWrap: 'anywhere' }}>

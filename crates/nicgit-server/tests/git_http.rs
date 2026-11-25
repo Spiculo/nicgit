@@ -172,12 +172,12 @@ async fn push_records_activity() {
     panic!("no push activity recorded");
 }
 
-/// The real KimBim M5 project (two design options combined) survives a push and clone unchanged.
+/// The real NicBim M5 project (two design options combined) survives a push and clone unchanged.
 #[tokio::test]
 async fn golden_m5_push_roundtrip() {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../kimcad/build/m5/project/.git");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../nicbim/build/m5/project/.git");
     if !fixture.is_dir() {
-        eprintln!("skipped: {} missing (run `pixi run m5` in kimcad)", fixture.display());
+        eprintln!("skipped: {} missing (run `pixi run m5` in nicbim)", fixture.display());
         return;
     }
     let app = common::TestApp::spawn().await;

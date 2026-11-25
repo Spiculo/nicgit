@@ -1,29 +1,29 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Proves the production compose stack, as a self-hosted server: builds it from this working tree and the kimcad
+# Proves the production compose stack, as a self-hosted server: builds it from this working tree and the nicbim
 # working tree as they are (uncommitted changes included, through scripts/snapshot.sh), runs the whole
 # flow against the real containers (scripts/e2e.py), and tries from inside a worker everything a compromised job
 # would try (decision N30). Everything runs under its own compose project and is removed at the end, volumes
 # included, so it never touches a real deployment.
-# Needs Docker, a kimcad checkout next to this one, and its M5 fixture (`pixi run m5` in kimcad).
+# Needs Docker, a nicbim checkout next to this one, and its M5 fixture (`pixi run m5` in nicbim).
 #   KEEP=1 ./scripts/stack-check.sh    leaves the stack running afterwards
 set -e
 here="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$here"
-kim="${KIMBIM_HOME:-$here/../kimcad}"
+kim="${NICBIM_HOME:-${KIMBIM_HOME:-$here/../nicbim}}"
 # Docker on Windows needs Windows paths, not Git Bash ones.
 native() { case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) cygpath -w "$1" ;; *) printf '%s\n' "$1" ;; esac; }
 port="${STACK_PORT:-3200}"
 env_file="$(mktemp)"
 src="$(mktemp -d)"
 "$here/scripts/snapshot.sh" "$here" --work "$src/nicgit"
-"$here/scripts/snapshot.sh" "$kim" --work "$src/kimcad"
+"$here/scripts/snapshot.sh" "$kim" --work "$src/nicbim"
 cat > "$env_file" <<EOF
 NICGIT_DEPLOYMENT=self-hosted
 NICGIT_VERSION=stack-check
 NICGIT_IMAGE_PREFIX=nicgit-stackcheck
 NICGIT_SOURCE_CONTEXT=$(native "$src/nicgit")
-NICGIT_ENGINE_CONTEXT=$(native "$src/kimcad")
+NICGIT_ENGINE_CONTEXT=$(native "$src/nicbim")
 NICGIT_DB_PASSWORD=stack-check-db-$$
 NICGIT_WORKER_TOKEN=stack-check-pool-$$
 NICGIT_PUBLIC_URL=http://localhost:$port

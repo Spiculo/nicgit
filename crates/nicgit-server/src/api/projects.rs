@@ -168,7 +168,12 @@ async fn update(
         if o.is_empty() || o.contains("..") || o.starts_with('/') {
             return Err(AppError::bad_request("not a design option name"));
         }
+        let git = crate::gitread::Git::new(&p.repo_dir(&state));
+        if git.resolve(o).await.is_err() {
+            return Err(AppError::bad_request("that design option does not exist"));
+        }
         sqlx::query("UPDATE projects SET default_option = $2 WHERE id = $1").bind(p.id).bind(o).execute(&state.db).await?;
+        crate::repos::set_head(&state.cfg, p.id, o).await.map_err(AppError::internal)?;
     }
     let p = access::find(&state, &owner, &slug).await?.ok_or_else(AppError::not_found)?;
     Ok(Json(p.to_json(Some(Role::Admin))))

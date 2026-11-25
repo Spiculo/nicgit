@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Whole projects in and out: import a .kim or .ifc as a new project; download a .kim.
+//! Whole projects in and out: import a .nic or .ifc as a new project; download a .nic.
 use crate::{
     access,
     api::{jobs::respond, projects::{create_project, new_project_owner, NewProject}},
@@ -29,7 +29,7 @@ pub fn router(max_file_mb: u64) -> Router<AppState> {
     let limit = usize::try_from((max_file_mb + 1) << 20).unwrap_or(usize::MAX);
     Router::new()
         .route("/api/projects/import", post(import).layer(DefaultBodyLimit::max(limit)))
-        .route("/api/projects/{owner}/{slug}/export.kim", get(export))
+        .route("/api/projects/{owner}/{slug}/export.nic", get(export))
 }
 
 fn too_large(mb: u64) -> AppError {
@@ -50,12 +50,12 @@ async fn import(State(state): State<AppState>, user: CurrentUser, mut form: Mult
                 Some("file") => {
                     let original = field.file_name().unwrap_or("upload").to_string();
                     let lower = original.to_lowercase();
-                    let kind = if lower.ends_with(".kim") {
-                        "kim"
+                    let kind = if lower.ends_with(".nic") {
+                        "nic"
                     } else if lower.ends_with(".ifc") {
                         "ifc"
                     } else {
-                        return Err(AppError::bad_request("upload a .kim or .ifc file"));
+                        return Err(AppError::bad_request("upload a .nic or .ifc file"));
                     };
                     let name = format!("{}.{kind}", Uuid::new_v4());
                     let path = crate::repos::incoming_dir(&state.cfg).join(&name);
@@ -89,7 +89,7 @@ async fn import(State(state): State<AppState>, user: CurrentUser, mut form: Mult
         return Err(e);
     }
     let Some((path, kind, original)) = saved.clone() else {
-        return Err(AppError::bad_request("attach a .kim or .ifc file"));
+        return Err(AppError::bad_request("attach a .nic or .ifc file"));
     };
     // Only someone allowed to use the account learns whether it has room.
     let size = tokio::fs::metadata(&path).await?.len();
@@ -114,8 +114,8 @@ async fn import(State(state): State<AppState>, user: CurrentUser, mut form: Mult
     let stored = crate::repos::uploads_dir(&state.cfg, project.id);
     tokio::fs::create_dir_all(&stored).await?;
     tokio::fs::rename(&path, stored.join(&upload)).await?;
-    let job = if kind == "kim" {
-        jobs::enqueue(&state.db, project.id, "import_kim", json!({"upload": upload, "max_bytes": crate::limits::bytes(state.cfg.max_repo_mb), "by": user.id}), None).await?
+    let job = if kind == "nic" {
+        jobs::enqueue(&state.db, project.id, "import_nic", json!({"upload": upload, "max_bytes": crate::limits::bytes(state.cfg.max_repo_mb), "by": user.id}), None).await?
     } else {
         jobs::enqueue(
             &state.db,
@@ -158,9 +158,9 @@ async fn export(
     let job = jobs::enqueue(
         &state.db,
         p.id,
-        "export_kim",
+        "export_nic",
         json!({"scope": scope, "option": option, "name": p.slug}),
-        Some(&jobs::key(&p, "export_kim", &[&scope, &option, &state_key])),
+        Some(&jobs::key(&p, "export_nic", &[&scope, &option, &state_key])),
     )
     .await?;
     if !job.done() {
@@ -181,7 +181,7 @@ async fn export(
         [
             (header::CONTENT_TYPE, "application/zip".to_string()),
             (header::CONTENT_LENGTH, len.to_string()),
-            (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}.kim\"", p.slug)),
+            (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}.nic\"", p.slug)),
         ],
         Body::from_stream(ReaderStream::new(file)),
     )

@@ -32,9 +32,9 @@ deploy/
   self-hosted.env.example   a studio's settings
   hosted.env.example        our service's settings (the real ones live in the hosted service's private infra)
   images/Dockerfile.server  the Rust server, the web app and git
-  images/Dockerfile.worker  the engine (kimcad) and the job runner
+  images/Dockerfile.worker  the engine (nicbim) and the job runner
   compose.dev.yaml          the development database only
-engine.rev                  the kimcad commit releases are built with
+engine.rev                  the nicbim commit releases are built with
 scripts/build-images.sh     builds the release images
 ```
 
@@ -44,13 +44,13 @@ The hosted service's own infrastructure (machines, DNS, secrets, backups, monito
 
 A NicGit release is one version number (`version` in `Cargo.toml`) for both images, `nicgit-server:<version>` and `nicgit-worker:<version>`. Always run a server and workers of the same version.
 
-Both images carry the same engine: the kimcad commit in [`engine.rev`](../engine.rev) (decision N40). The engine defines the record format, the merge and the checks, so the engine commit, not the NicGit version, decides whether a desktop app and a server understand each other. `scripts/build-images.sh` builds both images from this repository as committed and kimcad at that commit (both through `git archive`, so neither checkout's uncommitted state gets in), and compiles the commit into the server, which reports it at `/api/instance` and in the image label `dev.nicgit.engine.revision`.
+Both images carry the same engine: the nicbim commit in [`engine.rev`](../engine.rev) (decision N40). The engine defines the record format, the merge and the checks, so the engine commit, not the NicGit version, decides whether a desktop app and a server understand each other. `scripts/build-images.sh` builds both images from this repository as committed and nicbim at that commit (both through `git archive`, so neither checkout's uncommitted state gets in), and compiles the commit into the server, which reports it at `/api/instance` and in the image label `dev.nicgit.engine.revision`.
 
-Development is different on purpose: `cargo build` and `scripts/dev.sh` use whatever `../kimcad` has checked out, so engine and forge can change together. `scripts/dev.sh` says when that is not the pinned commit, and the dev server reports `engine: "dev"`.
+Development is different on purpose: `cargo build` and `scripts/dev.sh` use whatever `../nicbim` has checked out, so engine and forge can change together. `scripts/dev.sh` says when that is not the pinned commit, and the dev server reports `engine: "dev"`.
 
 **Releasing**, until there is CI for it:
 
-1. Point `engine.rev` at the kimcad commit the release was tested with, and run the tests against it (README, Test).
+1. Point `engine.rev` at the nicbim commit the release was tested with, and run the tests against it (README, Test).
 2. Set `version` in `Cargo.toml` and add the release to [CHANGELOG.md](../CHANGELOG.md), saying when the engine commit changed and whether the record format did.
 3. Commit, tag `v<version>`, run `scripts/build-images.sh` (`PUSH=1` with `NICGIT_IMAGE_PREFIX` set to push to a registry).
 

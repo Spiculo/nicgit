@@ -30,7 +30,7 @@ pub fn router() -> Router<AppState> {
 fn may_write(kind: &str, path: &str) -> bool {
     match kind {
         "export_ifc" => path.starts_with("ifc/") && path.ends_with(".ifc"),
-        "export_kim" => path.starts_with("exports/") && path.ends_with(".kim"),
+        "export_nic" => path.starts_with("exports/") && path.ends_with(".nic"),
         _ => false,
     }
 }
@@ -40,7 +40,7 @@ fn may_read(kind: &str, path: &str) -> bool {
 }
 
 fn produces_artifacts(kind: &str) -> bool {
-    matches!(kind, "export_ifc" | "checks" | "export_kim")
+    matches!(kind, "export_ifc" | "checks" | "export_nic")
 }
 
 fn forbidden() -> AppError {
@@ -119,7 +119,7 @@ async fn save(state: &AppState, tmp: &std::path::Path, body: Body) -> ApiResult<
 }
 
 fn is_import(job: &RunningJob) -> bool {
-    matches!(job.kind.as_str(), "import_kim" | "import_ifc")
+    matches!(job.kind.as_str(), "import_nic" | "import_ifc")
 }
 
 async fn upload(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>) -> ApiResult<Response> {

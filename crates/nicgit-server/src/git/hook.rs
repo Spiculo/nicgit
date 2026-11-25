@@ -6,7 +6,7 @@ use nicgit_core::roles::Role;
 use std::io::{BufRead, Write};
 use std::process::{Command, Stdio};
 
-/// Paths whose blobs must be JSON objects: KimBim records and project files.
+/// Paths whose blobs must be JSON objects: NicBim records and project files.
 fn must_be_json(path: &str) -> bool {
     ["objects/", "nodes/", "loose/", "geometry/"].iter().any(|p| path.starts_with(p) && path.ends_with(".json"))
         || matches!(path, "kimbim.json" | "settings.json" | "checks.json")
@@ -230,7 +230,7 @@ pub fn pre_receive() -> i32 {
         let records: Vec<(String, String)> = blobs.into_iter().filter(|(path, _)| must_be_json(path)).collect();
         match invalid_json(&records) {
             Ok(bad) if bad.is_empty() => {}
-            Ok(bad) => errors.push(format!("{} record(s) are not valid KimBim JSON (a text merge or a manual edit?): {}", bad.len(), listed(&bad))),
+            Ok(bad) => errors.push(format!("{} record(s) are not valid NicBim JSON (a text merge or a manual edit?): {}", bad.len(), listed(&bad))),
             Err(e) => errors.push(format!("could not check the push: {e}")),
         }
     }

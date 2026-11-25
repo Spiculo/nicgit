@@ -51,7 +51,7 @@ def prepare(job: dict, client, root: pathlib.Path, progress: Callable[[float], N
     ctx.uploads_dir = root / "uploads"
     ctx.uploads_dir.mkdir()
     kind, args = job["kind"], job["args"]
-    if kind in ("import_kim", "import_ifc"):
+    if kind in ("import_nic", "import_ifc"):
         # Under the name the handler expects; a name with a path in it never comes out of the uploads folder.
         name = pathlib.PurePosixPath(args["upload"]).name
         if not client.download("upload", ctx.uploads_dir / name):
@@ -73,9 +73,9 @@ def send_back(job: dict, client, repo: pathlib.Path, ctx: handlers.Context, resu
     elif kind == "import_ifc":
         ref = f"refs/heads/{args.get('option') or 'main'}"
         _git(client, git_dir, "push", "-q", client.git_url, f"{ref}:{ref}")
-    elif kind == "import_kim":
+    elif kind == "import_nic":
         _git(client, git_dir, "push", "-q", client.git_url, "refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*")
-    elif kind in ("export_ifc", "export_kim") and isinstance(result, dict) and result.get("path"):
+    elif kind in ("export_ifc", "export_nic") and isinstance(result, dict) and result.get("path"):
         # A path means nothing outside this folder: the server stores the file, under a name relative to the cache.
         file = pathlib.Path(result.pop("path"))
         artifact = file.relative_to(ctx.cache_dir).as_posix()

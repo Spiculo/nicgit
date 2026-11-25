@@ -15,6 +15,7 @@ import { ProjectSettings } from './ProjectSettings'
 import { Proposals, NewProposal, ProposalDetail } from './Proposals'
 import { Issues, NewIssue, IssueDetail } from './Issues'
 import { Milestones } from './Milestones'
+import { Branches } from './Branches'
 
 export interface ProjectCtx {
   owner: string
@@ -80,6 +81,7 @@ export function ProjectLayout() {
         <nav className="rail" aria-label={overview.data.project.full_name}>
           {link('', t('rail.model'))}
           {link('/versions', t('rail.versions'))}
+          {link('/branches', t('rail.branches'))}
           {link('/compare', t('rail.compare'))}
           {link('/proposals', t('rail.proposals'), overview.data.open_proposals)}
           {link('/issues', t('rail.issues'), overview.data.open_issues)}
@@ -92,6 +94,7 @@ export function ProjectLayout() {
           <Routes>
             <Route index element={<Overview />} />
             <Route path="versions" element={<Versions />} />
+            <Route path="branches" element={<Branches />} />
             <Route path="compare" element={<Compare />} />
             <Route path="proposals" element={<Proposals />} />
             <Route path="proposals/new" element={<NewProposal />} />

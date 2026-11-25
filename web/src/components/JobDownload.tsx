@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useT } from '../i18n'
 
-/** A download the engine prepares first (a .kim export): waits for the job, then starts the download. */
+/** A download the engine prepares first (a .nic export): waits for the job, then starts the download. */
 export function JobDownload({ href, children }: { href: string; children: React.ReactNode }) {
   const t = useT()
   const [state, setState] = useState<'idle' | 'working' | 'failed'>('idle')

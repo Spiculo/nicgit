@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """One job in one process: `python -m nicgit_worker.child`, with {"url", "job"} on stdin.
 
-Engine code parses untrusted IFC and .kim files, so it runs here, holding only this job's token and a
+Engine code parses untrusted IFC and .nic files, so it runs here, holding only this job's token and a
 temporary folder. Nothing of it outlives the job, and the next customer's job starts in a new process."""
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import threading
 import time
 import traceback
 
-from kimbim import kimfile
+from . import project_file
 
 from . import handlers, workspace
 from .client import JobClient
@@ -60,7 +60,7 @@ def run_one(client, job: dict, heartbeat: float = HEARTBEAT_SECONDS) -> None:
     finally:
         stop.set()
         beater.join(timeout=5)
-        kimfile.remove_tree(root)
+        project_file.remove_tree(root)
 
 
 def main() -> int:

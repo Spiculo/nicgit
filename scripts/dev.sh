@@ -9,7 +9,7 @@ export NICGIT_WORKER_TOKEN="${NICGIT_WORKER_TOKEN:-dev-worker-token}"
 export NICGIT_DATA_DIR="${NICGIT_DATA_DIR:-$here/data}"
 export NICGIT_WEB_DIR="${NICGIT_WEB_DIR:-$here/web/dist}"
 docker compose -f deploy/compose.dev.yaml up -d --wait
-kim="${KIMBIM_HOME:-$here/../kimcad}"
+kim="${NICBIM_HOME:-${KIMBIM_HOME:-$here/../nicbim}}"
 pinned="$(grep -E '^[0-9a-f]{40}$' engine.rev | head -1)"
 [ "$(git -C "$kim" rev-parse HEAD 2>/dev/null)" = "$pinned" ] ||
   echo "note: $kim is not at the engine commit releases use ($pinned, engine.rev)"

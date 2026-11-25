@@ -1,12 +1,14 @@
 # NicGit
 
-The forge for NicBim (KimBim) projects: a git server and a web app where architects, consultants and clients **see, compare, review and combine** versions of a building model. Hosted by us, or on your own server.
+The forge for NicBim projects: a git server and a web app where architects, consultants and clients **see, compare, review and combine** versions of a building model. Hosted by us, or on your own server.
 
 - **Git hosting** that works with the desktop app today: `kimbim versions push/pull` (or plain git) to `https://<host>/<owner>/<project>.git`, with a personal access token as the password.
 - **The model in the browser** at any version: 3D, element properties, the history of any element.
 - **Compare** any two versions or design options: changed elements coloured in 3D, grouped by level, field by field, plus project settings.
 - **Proposals** to combine one design option into another: approvals by role, protected options, required checks, and conflicts settled by keeping one side or the other (whole, or per conflict). Combine runs the engine's own record merge, never git's text merge.
-- **Issues** as BCF topics (import and export `.bcfzip`), **milestones** for project phases with sign-off, `.kim`/`.ifc` **import** and `.kim` **export**.
+- **Branches** (design options) with create, delete, protected options and a default branch that a clone checks out.
+- **Issues** as BCF topics (import and export `.bcfzip`), **releases** from milestones and tags with sign-off and a source archive, `.nic`/`.ifc` **import** and `.nic` **export**.
+- **Accounts, organisations and teams**: public or private projects, five roles, org members, teams and team project grants.
 - **Actions** (the engine's schema, IDS, clash and model checks) and **AI** summaries through the AI router, both metered and capped by budgets.
 - Private by default; a project you cannot read does not exist for you (404 everywhere).
 
@@ -21,18 +23,18 @@ One build runs two ways ([docs/deployment.md](docs/deployment.md)): our **hosted
 ```text
 crates/nicgit-core     roles, names, conflict policy, approval rules (pure, unit-tested)
 crates/nicgit-server   Rust server (axum, sqlx/Postgres): API, auth, git smart HTTP, hooks, jobs, metering, AI
-workers/engine         Python engine worker: KimBim engine jobs (diff, merge, export, import, checks)
+workers/engine         Python engine worker: NicBim engine jobs (diff, merge, export, import, checks)
 web                    React + TypeScript app, 3D with web-ifc + three.js
 deploy                 the compose stack both deployments run, env examples, Dockerfiles (deploy/images)
 scripts                dev stack, demo data, end-to-end test, release images
-engine.rev             the kimcad commit release images are built with
+engine.rev             the nicbim commit release images are built with
 ```
 
-The engine is the KimBim checkout next to this one (`../kimcad`; override with `KIMBIM_HOME`). The server links its `kimbim-repo` crate; the worker imports its Python package and runs in its pixi environment. Development uses that checkout as it is; releases use the commit in `engine.rev`.
+The engine is the NicBim checkout next to this one (`../nicbim`; override with `NICBIM_HOME`, or the old `KIMBIM_HOME`). The server links its `kimbim-repo` crate; the worker imports its Python package and runs in its pixi environment. Development uses that checkout as it is; releases use the commit in `engine.rev`.
 
 ## Develop
 
-Needs Rust, Node 22, Docker (for Postgres), git, and a kimcad checkout with its pixi environment built (`pixi install && pixi run build` there; `pixi run m5 && pixi run house` for the fixtures).
+Needs Rust, Node 22, Docker (for Postgres), git, and a nicbim checkout with its pixi environment built (`pixi install && pixi run build` there; `pixi run m5 && pixi run house` for the fixtures).
 
 ```bash
 cd web && npm ci && npm run build && cd ..
@@ -41,7 +43,10 @@ cd web && npm ci && npm run build && cd ..
 ./scripts/dev-stop.sh
 ```
 
-Then open http://127.0.0.1:3000.
+Then open http://127.0.0.1:3000. A local server can sign in without Google when `NICGIT_DEV=1`:
+`http://127.0.0.1:3000/api/dev/login?slug=ana` (decision N47; never enable it in production).
+
+The macOS NicBim checkout works too: `pixi install && pixi run build` there, then `pixi run m5` for the demo fixture. The engine worker runs in the same pixi environment (`./scripts/engine-python.sh -m nicgit_worker`), so macOS can run the whole stack; release images are Linux.
 
 ## Test
 

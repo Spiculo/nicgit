@@ -165,6 +165,28 @@ label {
 .error {
   color: var(--removed);
 }
+.btn-small {
+  padding: 0.2rem 0.45rem;
+  font-size: var(--step--1);
+}
+.badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--grid);
+  border-radius: 999px;
+  background: var(--blue-wash);
+  color: var(--blue);
+  font-size: 0.72rem;
+  font-weight: 560;
+  vertical-align: middle;
+}
+.card {
+  border: 1px solid var(--grid);
+  border-bottom-color: var(--graphite);
+  background: var(--sheet);
+  padding: 1rem;
+}
 .row {
   display: flex;
   gap: 0.75rem;

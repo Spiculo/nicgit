@@ -59,7 +59,7 @@ export function ImportProject() {
           <input
             id="file"
             type="file"
-            accept=".kim,.ifc"
+            accept=".nic,.ifc"
             required
             onChange={(e) => {
               const f = e.target.files?.[0] ?? null

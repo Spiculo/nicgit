@@ -6,7 +6,8 @@ use crate::{
     error::{ApiResult, AppError},
 };
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
+    response::Redirect,
     routing::{delete, get, post},
     Json, Router,
 };
@@ -19,6 +20,7 @@ use uuid::Uuid;
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/api/dev/login", get(dev_login))
         .route("/api/auth/logout", post(logout))
         .route("/api/me", get(me).patch(update_me))
         .route("/api/me/tokens", get(list_tokens).post(create_token))
@@ -41,6 +43,26 @@ pub(crate) async fn start_session(state: &AppState, jar: CookieJar, user: Uuid) 
         .max_age(Duration::days(auth::SESSION_DAYS))
         .build();
     Ok(jar.add(cookie))
+}
+
+#[derive(Deserialize)]
+struct DevLogin {
+    slug: Option<String>,
+}
+
+/// Local preview only: sign in as a dev account without Google. Enabled by NICGIT_DEV=1 and never
+/// reachable otherwise (the same switch `dev-user` uses).
+async fn dev_login(State(state): State<AppState>, jar: CookieJar, Query(q): Query<DevLogin>) -> ApiResult<(CookieJar, Redirect)> {
+    if std::env::var("NICGIT_DEV").ok().as_deref() != Some("1") {
+        return Err(AppError::not_found());
+    }
+    let slug = q.slug.unwrap_or_else(|| "ana".into());
+    if !nicgit_core::names::valid_slug(&slug) {
+        return Err(AppError::bad_request("not a valid user name"));
+    }
+    let id = crate::dev::create_user(&state.db, &slug, &format!("{slug}@example.com"), &slug).await?;
+    let jar = start_session(&state, jar, id).await?;
+    Ok((jar, Redirect::to("/")))
 }
 
 async fn logout(State(state): State<AppState>, jar: CookieJar) -> ApiResult<(CookieJar, Json<Value>)> {

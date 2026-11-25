@@ -245,8 +245,8 @@ async fn an_import_that_does_not_fit_fails_with_the_reason() {
     let pid: Uuid = sqlx::query_scalar("SELECT id FROM projects WHERE slug = 'house'").fetch_one(&app.db).await.unwrap();
     std::fs::write(app.data.path().join("repos").join(pid.to_string()).join(".git").join("filler"), noise(2 << 20)).unwrap();
     sqlx::query("UPDATE jobs SET status = 'done' WHERE status = 'queued'").execute(&app.db).await.unwrap();
-    jobs::enqueue(&app.db, pid, "import_kim", json!({"upload": "x.kim"}), None).await.unwrap();
-    let job = app.claim(&["import_kim"]).await;
+    jobs::enqueue(&app.db, pid, "import_nic", json!({"upload": "x.nic"}), None).await.unwrap();
+    let job = app.claim(&["import_nic"]).await;
     let h = format!("http.extraHeader=Authorization: Bearer {}", job["token"].as_str().unwrap());
     let git_url = app.url(&format!("/internal/jobs/{}/git", job["id"].as_str().unwrap()));
     git_ok(repo.path(), &["checkout", "-q", "-b", "imported"]).await;

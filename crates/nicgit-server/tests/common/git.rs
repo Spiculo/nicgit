@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Helpers that build small KimBim-shaped repositories with the plain git CLI.
+//! Helpers that build small NicBim-shaped repositories with the plain git CLI.
 use std::path::Path;
 use std::process::Output;
 
@@ -28,7 +28,7 @@ pub fn write_record(dir: &Path, path: &str, content: &str) {
     std::fs::write(p, content).unwrap();
 }
 
-/// A working repository on `main` with one version of a tiny KimBim project.
+/// A working repository on `main` with one version of a tiny NicBim project.
 pub async fn kimbim_repo() -> tempfile::TempDir {
     let d = tempfile::tempdir().unwrap();
     git_ok(d.path(), &["init", "-q", "-b", "main"]).await;

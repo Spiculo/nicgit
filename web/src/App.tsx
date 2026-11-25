@@ -8,6 +8,7 @@ import { Dashboard, Explore } from './pages/Dashboard'
 import { NewProject } from './pages/NewProject'
 import { ImportProject } from './pages/ImportProject'
 import { Account } from './pages/Account'
+import { OrgPage } from './pages/OrgPage'
 import { ProjectLayout } from './pages/ProjectLayout'
 import { NotFound } from './components/States'
 
@@ -27,6 +28,7 @@ export function App() {
         <Route path="/new" element={signedIn ? <NewProject /> : <Navigate to="/login" replace />} />
         <Route path="/import" element={signedIn ? <ImportProject /> : <Navigate to="/login" replace />} />
         <Route path="/account" element={signedIn ? <Account /> : <Navigate to="/login" replace />} />
+        <Route path="/orgs/:slug" element={signedIn ? <OrgPage /> : <Navigate to="/login" replace />} />
         <Route path="/:owner/:slug/*" element={<ProjectLayout />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

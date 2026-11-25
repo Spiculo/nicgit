@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Running the real Python engine worker in tests. These tests are skipped unless NICGIT_TEST_ENGINE=1
-//! (they need kimcad's pixi environment and its M5 fixture).
+//! (they need nicbim's pixi environment and its M5 fixture).
 use super::TestApp;
 use std::path::PathBuf;
 
@@ -9,7 +9,7 @@ pub fn enabled() -> bool {
 }
 
 pub fn m5_fixture() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../kimcad/build/m5/project/.git")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../nicbim/build/m5/project/.git")
 }
 
 /// Run one worker until the queue is empty.

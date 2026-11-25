@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 nicgit-core = { path = "../nicgit-core" }
-kimbim-repo = { path = "../../../kimcad/crates/kimbim-repo" }
+kimbim-repo = { path = "../../../nicbim/crates/kimbim-repo" }
 axum = { version = "0.8", features = ["multipart", "macros"] }
 axum-extra = { version = "0.10", features = ["cookie"] }
 tokio = { version = "1", features = ["full"] }
