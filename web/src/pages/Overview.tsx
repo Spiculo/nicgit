@@ -183,7 +183,13 @@ export function Overview() {
               <a className="btn" href={ctx.api(`/versions/${head.head}/model.ifc`)} download>
                 {t('overview.download')}
               </a>{' '}
-              <JobDownload href={ctx.api(`/export.nic?scope=full`)}>.nic</JobDownload>
+              <JobDownload href={ctx.api(`/export.nic?scope=full`)}>.nic</JobDownload>{' '}
+              <a className="btn" href={ctx.api(`/archive?rev=${encodeURIComponent(head.head)}`)} download>
+                {t('overview.source')}
+              </a>{' '}
+              <a className="btn" href={ctx.api('/issues/export.bcfzip')} download>
+                BCF
+              </a>
             </p>
             <h3>{t('overview.clone')}</h3>
             <code className="small" style={{ overflowWrap: 'anywhere' }}>

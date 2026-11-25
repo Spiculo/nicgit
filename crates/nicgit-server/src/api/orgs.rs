@@ -7,7 +7,7 @@ use crate::{
 };
 use axum::{
     extract::{Path, State},
-    routing::{delete, get, post, put},
+    routing::{get, post, put},
     Json, Router,
 };
 use nicgit_core::roles::Role;

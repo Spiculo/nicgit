@@ -60,6 +60,7 @@ export const en = {
   'overview.openProposals': 'Open proposals',
   'overview.openIssues': 'Open issues',
   'overview.download': 'Download IFC',
+  'overview.source': 'Source .zip',
 
   'title.project': 'Project',
   'title.option': 'Design option',

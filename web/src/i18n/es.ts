@@ -312,4 +312,5 @@ export const es: Record<Key, string> = {
   'milestones.tags': 'Etiquetas',
   'milestones.tagsEmpty': 'Aún no hay etiquetas. Una etiqueta marca una versión; una publicación añade notas y firma.',
   'milestones.source': 'fuente .zip',
+  'overview.source': 'Fuente .zip',
 }
