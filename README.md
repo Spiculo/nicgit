@@ -38,9 +38,9 @@ Needs Rust, Node 22, Docker (for Postgres), git, and a nicbim checkout with its 
 
 ```bash
 cd web && npm ci && npm run build && cd ..
-./scripts/dev.sh            # Postgres on :5434, server on :3000 (serves web/dist), one engine worker
-./scripts/seed-demo.sh      # user ana / "correct horse battery", project studio/sample-house with a proposal
-./scripts/dev-stop.sh
+./scripts/preview.sh        # Postgres on :5434, server on :3000 (web/dist), one worker, demo data
+./scripts/preview.sh stop   # stop all three
+# or the individual pieces: ./scripts/dev.sh, ./scripts/seed-demo.sh, ./scripts/dev-stop.sh
 ```
 
 Then open http://127.0.0.1:3000. A local server can sign in without Google when `NICGIT_DEV=1`:
