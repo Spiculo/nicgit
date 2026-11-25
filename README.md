@@ -2,7 +2,7 @@
 
 The forge for NicBim projects: a git server and a web app where architects, consultants and clients **see, compare, review and combine** versions of a building model. Hosted by us, or on your own server.
 
-- **Git hosting** that works with the desktop app today: `kimbim versions push/pull` (or plain git) to `https://<host>/<owner>/<project>.git`, with a personal access token as the password.
+- **Git hosting** that works with the desktop app today: `kimbim versions push/pull` (or plain git; the CLI keeps its `kimbim` name until the NicBim code rename) to `https://<host>/<owner>/<project>.git`, with a personal access token as the password.
 - **The model in the browser** at any version: 3D, element properties, the history of any element.
 - **Compare** any two versions or design options: changed elements coloured in 3D, grouped by level, field by field, plus project settings.
 - **Proposals** to combine one design option into another: approvals by role, protected options, required checks, and conflicts settled by keeping one side or the other (whole, or per conflict). Combine runs the engine's own record merge, never git's text merge.
