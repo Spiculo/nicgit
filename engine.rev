@@ -1,4 +1,4 @@
 # The nicbim (NicBim engine) commit that release images are built with and that this NicGit version is tested
 # against (decision N40). scripts/build-images.sh reads the first 40-hex line. Development builds use whatever
 # the ../nicbim checkout has; scripts/dev.sh says when that is not this commit.
-0d602c49eb813a9f8f57b3c73f6eb43cc66afc02
+603210a7b0057803e5b2f272c19f84e692464f9d
