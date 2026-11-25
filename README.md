@@ -12,7 +12,7 @@ The forge for NicBim projects: a git server and a web app where architects, cons
 - **Actions** (the engine's schema, IDS, clash and model checks) and **AI** summaries through the AI router, both metered and capped by budgets.
 - Private by default; a project you cannot read does not exist for you (404 everywhere).
 
-Design: [docs/superpowers/specs/2026-11-03-nicgit-design.md](docs/superpowers/specs/2026-11-03-nicgit-design.md). Decisions: [docs/decisions.md](docs/decisions.md). Next: [docs/future-work.md](docs/future-work.md). Specs: [files-first diff viewer](docs/specs/2026-11-25-files-first-diff-viewer.md), [GPU render service](docs/specs/2026-11-25-gpu-render-service.md). AI router contract: [docs/ai-router.md](docs/ai-router.md). Changes: [CHANGELOG.md](CHANGELOG.md).
+Design: [docs/superpowers/specs/2026-11-03-nicgit-design.md](docs/superpowers/specs/2026-11-03-nicgit-design.md). Decisions: [docs/decisions.md](docs/decisions.md). Next: [docs/future-work.md](docs/future-work.md). Specs: [files-first diff viewer](docs/specs/2026-11-25-files-first-diff-viewer.md), [GPU render service](docs/specs/2026-11-25-gpu-render-service.md), [repository navigation](docs/specs/2026-11-25-repository-navigation.md). AI router contract: [docs/ai-router.md](docs/ai-router.md). Changes: [CHANGELOG.md](CHANGELOG.md).
 
 ## Deploy
 

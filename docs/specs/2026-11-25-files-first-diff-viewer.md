@@ -90,6 +90,91 @@ Browser
 The engine remains the only authority for records, geometry, plan cuts and merges. The browser is a
 viewer of a prepared bundle, never a second model engine.
 
+## 3.1 External dependencies: linked models, object libraries, assets
+
+A version is **not automatically self-contained**. It contains the project records, settings and the
+files the project copied into `files/`; it does not contain a linked IFC, a hotlinked project, an
+office library `.nicobj` or an external texture. The web must not pretend otherwise.
+
+| Dependency | What the repository stores | Browser default | Opt-in |
+|---|---|---|---|
+| Linked IFC / project / hotlink | The link record (`KIMBIM_Link`): path, transform, kind, source hash if present | **Proxy/bbox + status badge**, not the linked geometry | Pinned, read-only snapshot baked at a known hash (size/licence limits) |
+| Copy/monitor elements | The copied elements are normal records; the monitor link is a record | Copied geometry renders normally; source changes are a dependency event | Source snapshot |
+| Office library `.nicobj` / IFC type | The placed object's evaluated representation + a library reference/hash | **Baked placed geometry**; definition not executed | Library definition download |
+| Bundled library | The app version; content hash | Baked placed geometry | — |
+| External texture / underlay / HDR | The path and, if copied, a `files/` entry | Only if the asset is embedded; otherwise a material warning | Pinned asset upload |
+| Sheets / deliverables | The version settings + embedded assets | Generated as files by the engine, never by the browser | — |
+
+### Bundle manifest addition
+
+```json
+"dependencies": {
+  "links": [
+    { "guid": "2x9...", "path": "structure.ifc", "kind": "ifc",
+      "sha256": "…", "status": "resolved|missing|changed|excluded",
+      "mode": "proxy|baked" }
+  ],
+  "libraries": [
+    { "ref": "office:stool", "definition_sha256": "…",
+      "source": "bundled|office|project", "status": "resolved|missing" }
+  ],
+  "files": [
+    { "path": "textures/wood.exr", "sha256": "…", "status": "resolved|missing" }
+  ]
+}
+```
+
+`status` is never guessed: `resolved` requires a hash match, `changed` means the recorded hash and the
+available source differ, `missing` means the file/definition is not available, `excluded` means the
+mode is `proxy`.
+
+### Rules
+
+1. **The browser never resolves a path.** It only consumes the bundle. Resolution happens in the
+   engine/bundle job, which has access to the project's repository and the server's pinned library
+   snapshot. No `../`, no absolute host paths, no URL fetch from an element record.
+2. **Proxy is the default** for linked models. A reviewer sees the link's bbox/placeholder, its
+   transform, its status and a "linked model changed/not included" badge. The linked building is not
+   silently rendered stale.
+3. **Baking is an explicit opt-in** (`include_links=true` on a bundle request). The snapshot is
+   read-only, size-limited, stored as an artifact keyed by source hash, and labelled "snapshot at
+   <hash>". It is not a new source of truth and never writes back.
+4. **Object libraries are baked, not executed.** Placed objects render from their evaluated
+   representation; the `.nicobj` definition is not run in the browser or on the server as code. The
+   manifest records the definition hash and parameter values. A definition is declarative data, but
+   treat a crafted one as untrusted input.
+5. **Missing dependencies fail visibly.** `library_missing` and `link_missing` are badges and a list
+   entry; the affected element gets a bbox, not a plausible but wrong mesh. A bundle never silently
+   drops a dependency.
+6. **Sheets and renders use the same pins.** A sheet or render job that needs a missing link or
+   library fails with `dependency_missing` rather than producing an incomplete deliverable.
+7. **The full `.nic` remains the portable archive.** A `.nic` that includes the working copy and the
+   embedded files is the way to move a project offline; the web bundle is a review aid.
+
+### Diff semantics
+
+- A link record change is **one dependency change**, not a geometry diff of the linked model. The
+  change list says "linked model changed" with the old/new hash/path.
+- A library definition change lists the placements that use it. If both sides can be evaluated, the
+  bundle compares the baked geometry and reports a real geometry change; if not, it reports
+  `library_changed` and a placeholder.
+- A copied/monitored element is a normal record and diffs normally; the monitor link is a dependency
+  event.
+- An external texture change is a material/dependency event; if the texture is not embedded, the
+  bundle marks the material as `texture_missing` rather than showing the wrong colour.
+
+### Acceptance criteria additions
+
+- A project with a linked IFC: default bundle contains a link proxy and `status: excluded`; no linked
+  geometry; the full IFC download still has the link record (not the source).
+- With `include_links=true`: the snapshot is pinned by hash, labelled, and size-limited; a missing
+  source returns `link_missing`.
+- A placed office-library object: geometry is baked; the `.nicobj` definition is not executed; a
+  missing definition returns `library_missing` with a bbox.
+- A changed library definition with both sides resolvable: the affected placements are listed and
+  compared; without both sides, the result is `library_changed`.
+- No request from the browser contains a filesystem path from a record.
+
 ## 4. Diff bundle contract
 
 One zip, content-addressed by `(project, from, to, cutoff, context, engine commit, bundle version)`.
@@ -302,3 +387,9 @@ These are review aids, not rendering benchmarks; the browser does not need 60 fp
 5. **Bundle format**: one GLB + plan JSON (recommended) or a custom binary pack?
 6. **Sheets**: static PNG previews, PDFs, or both?
 7. **Element-level downloads**: does a reviewer need a single element's geometry, or only the diff?
+8. **Linked models**: is a proxy enough, or must reviewers see a pinned snapshot? If snapshot, what
+   size/licence limit and who may create it?
+9. **Libraries**: should a version require a `library.lock` (hashes of every office library used), or
+   is a best-effort manifest enough for review?
+10. **Textures and underlays**: embed them in the bundle for changed elements, or always show a
+    material warning when external?

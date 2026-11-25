@@ -241,38 +241,105 @@ label {
 }
 
 .project {
-  display: grid;
-  grid-template-columns: var(--rail) 1fr;
+  display: flex;
+  flex-direction: column;
   height: calc(100% - var(--bar));
+  min-height: 0;
 }
-.rail {
-  border-right: 1px solid var(--grid);
-  padding: 1rem 0;
+/* Repository tabs: GitHub's repo header, in the trace-paper language. */
+.repo-tabs {
+  display: flex;
+  gap: 1.35rem;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--grid);
   background: var(--sheet);
+  overflow-x: auto;
+  flex: 0 0 auto;
+}
+.repo-tabs a {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.7rem 0.1rem;
+  color: var(--graphite);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.repo-tabs a:hover {
+  color: var(--ink);
+}
+.repo-tabs a.active {
+  color: var(--ink);
+  border-bottom-color: var(--blue);
+  font-weight: 620;
+}
+.repo-tabs .count {
+  min-width: 1.25rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--grid-faint);
+  color: var(--ink);
+  font-size: var(--step--1);
+  text-align: center;
+}
+/* Code's own sub-pages: a second row, not a sidebar. */
+.repo-subnav {
+  display: flex;
+  gap: 1rem;
+  padding: 0.35rem 1.5rem;
+  border-bottom: 1px solid var(--grid-faint);
+  background: var(--trace);
+  overflow-x: auto;
+  flex: 0 0 auto;
+}
+.repo-subnav a {
+  color: var(--graphite);
+  text-decoration: none;
+  font-size: var(--step--1);
+  padding: 0.15rem 0;
+  border-bottom: 1px solid transparent;
+  white-space: nowrap;
+}
+.repo-subnav a.active {
+  color: var(--ink);
+  border-bottom-color: var(--blue);
+  font-weight: 620;
+}
+.repo-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.repo-body.with-side {
+  grid-template-columns: 13rem 1fr;
+}
+.repo-side {
+  border-right: 1px solid var(--grid);
+  background: var(--sheet);
+  padding: 0.9rem 0;
   overflow-y: auto;
 }
-.rail a {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.45rem 1rem 0.45rem 1.25rem;
+.repo-side a {
+  display: block;
+  padding: 0.35rem 1.25rem;
   color: var(--ink);
   text-decoration: none;
   border-left: 3px solid transparent;
+  font-size: var(--step--1);
 }
-.rail a:hover {
+.repo-side a:hover {
   background: var(--trace);
+  border-left-color: var(--grid);
 }
-.rail a.active {
-  border-left-color: var(--blue);
-  font-weight: 620;
-  background: var(--trace);
-}
-.rail .count {
-  color: var(--graphite);
-}
-.project-main {
+.repo-main {
   overflow: auto;
   position: relative;
+  min-width: 0;
+}
+.repo-main section[id] {
+  scroll-margin-top: 1rem;
 }
 
 /* The construction grid behind the model. */
@@ -528,23 +595,24 @@ label {
 }
 
 @media (max-width: 52rem) {
-  .project {
+  .repo-body.with-side {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
   }
-  .rail {
+  .repo-side {
     display: flex;
+    gap: 0.25rem;
     overflow-x: auto;
-    padding: 0;
+    padding: 0.35rem 0.75rem;
     border-right: 0;
     border-bottom: 1px solid var(--grid);
   }
-  .rail a {
-    border-left: 0;
-    border-bottom: 3px solid transparent;
+  .repo-side a {
     white-space: nowrap;
+    border-left: 0;
+    border-bottom: 2px solid transparent;
+    padding: 0.25rem 0.4rem;
   }
-  .rail a.active {
+  .repo-side a:hover {
     border-bottom-color: var(--blue);
   }
   .split {

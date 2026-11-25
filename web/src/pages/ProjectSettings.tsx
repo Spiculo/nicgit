@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useT } from '../i18n'
 import { api, useAction, useApi } from '../lib/api'
 import type { Role } from '../lib/types'
@@ -29,7 +29,7 @@ function Members() {
   const set = useAction((v: { who: string; role: Role }) => api(ctx.api(`/members/${v.who}`), { method: 'PUT', json: { role: v.role } }), [key])
   const remove = useAction((w: string) => api(ctx.api(`/members/${w}`), { method: 'DELETE' }), [key])
   return (
-    <section className="stack">
+    <section id="members" className="stack">
       <h2>{t('settings.members')}</h2>
       <table className="schedule">
         <tbody>
@@ -156,7 +156,7 @@ function Rules() {
   const remove = useAction((o: string) => api(ctx.api(`/rules/${encodeURIComponent(o)}`), { method: 'DELETE' }), [key])
   const [adding, setAdding] = useState(false)
   return (
-    <section className="stack">
+    <section id="rules" className="stack">
       <h2>{t('settings.rules')}</h2>
       {rules.data?.rules.map((r) => <RuleEditor key={r.option} rule={r} onSave={(x) => save.mutate(x)} onRemove={() => remove.mutate(r.option)} />)}
       {adding ? (
@@ -187,6 +187,7 @@ function General() {
   const save = useAction(() => api(ctx.api(), { method: 'PATCH', json: { description, visibility, default_option: def } }), [[ctx.api('/overview')]])
   return (
     <form
+      id="general"
       className="stack"
       onSubmit={(e) => {
         e.preventDefault()
@@ -229,7 +230,7 @@ function Danger() {
   const nav = useNavigate()
   const [confirm, setConfirm] = useState('')
   return (
-    <section className="stack">
+    <section id="danger" className="stack">
       <h2>{t('settings.danger')}</h2>
       <p>{t('settings.deleteConfirm')}</p>
       <div className="row">
@@ -250,14 +251,29 @@ function Danger() {
   )
 }
 
+function Placeholder({ id, title, body, link }: { id: string; title: string; body: string; link?: { to: string; label: string } }) {
+  return (
+    <section id={id} className="stack">
+      <h2>{title}</h2>
+      <p>{body}</p>
+      {link && <Link to={link.to}>{link.label}</Link>}
+    </section>
+  )
+}
+
 export function ProjectSettings() {
   const t = useT()
   return (
     <main className="page stack" style={{ maxWidth: '52rem' }}>
       <h1>{t('settings.title')}</h1>
+      <p className="muted">{t('settings.subtitle')}</p>
       <General />
       <Members />
       <Rules />
+      <Placeholder id="ai" title={t('settings.ai')} body={t('config.aiBody')} link={{ to: '/account', label: t('config.openAccount') }} />
+      <Placeholder id="budgets" title={t('config.budgets')} body={t('config.budgetsBody')} link={{ to: '/account', label: t('config.openAccount') }} />
+      <Placeholder id="webhooks" title={t('config.webhooks')} body={t('config.webhooksBody')} />
+      <Placeholder id="audit" title={t('config.audit')} body={t('config.auditBody')} />
       <Danger />
     </main>
   )

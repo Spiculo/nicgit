@@ -179,6 +179,27 @@ Rules:
 - The recipe hash covers the canonical JSON, the scene hash, the backend version and the engine
   commit. A job records all four.
 
+## 5.1 Scene dependencies: links, libraries, textures
+
+A render job must know every input before it reserves a GPU-second. It never resolves a path from a
+record, and it never reads a working tree or a studio network share.
+
+- **Project/version jobs** use the same dependency manifest as the [files-first diff bundle](2026-11-25-files-first-diff-viewer.md#31-external-dependencies-linked-models-object-libraries-assets):
+  links, office libraries and external files are hashed and marked `resolved`, `missing`, `changed` or
+  `excluded`.
+- **Self-contained scene jobs** upload a pinned `.nic`/IFC plus every linked model, library definition,
+  texture and HDR as an asset with SHA-256. The CLI refuses to submit if a dependency is missing.
+- **Unresolved dependencies fail at estimate/start**, before a GPU is allocated:
+  `400 dependency_missing` with a list. A job never renders a silently incomplete building.
+- **Linked models** may be `proxy` (not rendered, for review-only jobs) or `baked` (pinned snapshot,
+  rendered). A render recipe chooses `include_links: true|false`; a client image that shows the
+  context building requires `true` and a snapshot.
+- **Object libraries** are declarative `.nicobj` data; the job evaluates placed geometry, never runs
+  library code. A missing definition is a dependency failure.
+- **Sheets** are not render inputs; a sheet set is generated separately (Sheets tab).
+- The job stores the dependency manifest and hashes, so the same scene + recipe + backend version
+  reproduces the job record; the frames are identified by hash, not by a path.
+
 ## 6. API
 
 All routes are authenticated with a PAT (or session); project access is checked like every other
@@ -384,6 +405,10 @@ job; the database holds metadata and hashes. Self-hosted uses the `data` volume 
 7. A job's manifest records scene hash, recipe hash, backend version, engine commit, GPU class and
    price snapshot; the same inputs reproduce the job record.
 8. No arbitrary code execution path exists in the recipe, assets or CLI.
+9. A job with a missing linked model, library definition or texture is refused before a GPU is
+   allocated, with `dependency_missing` and the exact list.
+10. A project-version job and a self-contained scene job with the same pinned hashes produce the same
+    job manifest (scene hash, dependency manifest, recipe hash, backend version).
 9. The CLI `--json` output and exit codes are stable; CI can submit and download.
 
 ## 14. Open questions (owner)

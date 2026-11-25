@@ -7,3 +7,4 @@ the changelog.
 |---|---|---|
 | 2026-11-25 | [Files-first NicGit and selective diff rendering](2026-11-25-files-first-diff-viewer.md) | Proposed (N51/N52) |
 | 2026-11-25 | [GPU render service](2026-11-25-gpu-render-service.md) | Proposed (N53); backend open (N54) |
+| 2026-11-25 | [Repository navigation](2026-11-25-repository-navigation.md) | Shell built; unbuilt tabs specified (N56–N58) |
