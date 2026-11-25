@@ -199,7 +199,7 @@ export const es: Record<Key, string> = {
   'activity.issue': 'abrió la incidencia #{n}',
   'activity.milestone': 'creó el hito {tag}',
 
-  'settings.title': 'Configuración del proyecto',
+  'settings.title': 'Configuración',
   'settings.general': 'General',
   'settings.members': 'Personas',
   'settings.rules': 'Opciones protegidas',

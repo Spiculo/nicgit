@@ -201,7 +201,7 @@ export const en = {
   'activity.issue': 'opened issue #{n}',
   'activity.milestone': 'created milestone {tag}',
 
-  'settings.title': 'Project settings',
+  'settings.title': 'Configs',
   'settings.general': 'General',
   'settings.members': 'People',
   'settings.rules': 'Protected options',
