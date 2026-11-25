@@ -131,7 +131,7 @@ export function OrgPage() {
           </table>
         )}
         {admin && (
-          <form className="card stack" onSubmit={done(() => addMember.mutate(undefined, { onError: fail }))}>
+          <form className="form-block stack" onSubmit={done(() => addMember.mutate(undefined, { onError: fail }))}>
             <h3>{t('org.addMember')}</h3>
             <div className="row">
               <input value={member} onChange={(e) => setMember(e.target.value)} placeholder="user-name" required />
@@ -174,7 +174,7 @@ export function OrgPage() {
         )}
         {admin && (
           <>
-            <form className="card stack" onSubmit={done(() => createTeam.mutate(undefined, { onError: fail }))}>
+            <form className="form-block stack" onSubmit={done(() => createTeam.mutate(undefined, { onError: fail }))}>
               <h3>{t('org.newTeam')}</h3>
               <div className="row">
                 <input value={teamSlug} onChange={(e) => setTeamSlug(e.target.value)} placeholder="design" required />
@@ -182,7 +182,7 @@ export function OrgPage() {
                 <button className="btn btn-primary" disabled={createTeam.isPending || !teamSlug}>{t('org.create')}</button>
               </div>
             </form>
-            <form className="card stack" onSubmit={done(() => addTeamMember.mutate(undefined, { onError: fail }))}>
+            <form className="form-block stack" onSubmit={done(() => addTeamMember.mutate(undefined, { onError: fail }))}>
               <h3>{t('org.addTeamMember')}</h3>
               <div className="row">
                 <select value={teamForMember} onChange={(e) => setTeamForMember(e.target.value)} required>
@@ -193,7 +193,7 @@ export function OrgPage() {
                 <button className="btn" disabled={addTeamMember.isPending || !teamForMember || !teamMember}>{t('org.add')}</button>
               </div>
             </form>
-            <form className="card stack" onSubmit={done(() => grantTeam.mutate(undefined, { onError: fail }))}>
+            <form className="form-block stack" onSubmit={done(() => grantTeam.mutate(undefined, { onError: fail }))}>
               <h3>{t('org.grant')}</h3>
               <div className="row">
                 <select value={teamForProject} onChange={(e) => setTeamForProject(e.target.value)} required>

@@ -75,9 +75,9 @@ export function Branches() {
                   <strong>{optionLabel(o.name)}</strong>
                   <div className="small muted">
                     <code>{o.name}</code>
-                    {o.is_default && <span className="badge">{t('branches.default')}</span>}
-                    {o.protected && <span className="badge">{t('branches.protected')}</span>}
-                    {o.is_agent && <span className="badge">agent</span>}
+                    {o.is_default && <span className="tag">{t('branches.default')}</span>}
+                    {o.protected && <span className="tag">{t('branches.protected')}</span>}
+                    {o.is_agent && <span className="tag">agent</span>}
                   </div>
                 </td>
                 <td>
@@ -105,7 +105,7 @@ export function Branches() {
       )}
 
       {ctx.can('member') && (
-        <form className="card stack" onSubmit={submit}>
+        <form className="form-block stack" onSubmit={submit}>
           <h2>{t('branches.create')}</h2>
           <label>
             {t('branches.name')}

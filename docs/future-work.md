@@ -60,10 +60,16 @@ Customer workflows defined in the project (file location inside the tree to be a
 - **Postgres row-level security** as a second wall behind the per-route checks (the per-route checks and the isolation test exist).
 - **Object storage (S3)** for caches and exports; today they live on the data volume.
 - **Live job progress over websockets**; the web app polls every second.
-- **Large models in the browser**: per-version geometry is the full IFC parsed by web-ifc in the browser. Server-side conversion to a streaming format (fragments/glTF per element, reused across versions by content) is the next step for 50k+ element models.
+- **Large models in the browser**: replaced in direction by [N51/N52](decisions.md) and the [files-first diff viewer](specs/2026-11-25-files-first-diff-viewer.md). The web app will download only the changed/selected elements as an engine-generated GLB + plan bundle; the full model stays in NicBim. Not implemented yet.
 - **2FA (TOTP)** and **teams UI** (teams exist in the schema and in permissions, not in the API/UI yet).
 - **Notifications by email** and **webhooks**.
 - **Comments pinned in 3D** on proposals: comments accept a pin (elements, viewpoint) through the API; the web app does not place them yet.
+
+## GPU render service (spec)
+
+A metered GPU render service prepared by the NicBim CLI, with custom recipes and per-second billing.
+The implementation-ready spec is [specs/2026-11-25-gpu-render-service.md](specs/2026-11-25-gpu-render-service.md)
+(decisions N53/N54). Not implemented.
 
 ## Two deployments (docs/deployment.md)
 

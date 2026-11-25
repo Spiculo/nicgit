@@ -169,23 +169,12 @@ label {
   padding: 0.2rem 0.45rem;
   font-size: var(--step--1);
 }
-.badge {
-  display: inline-block;
-  margin-left: 0.4rem;
-  padding: 0 0.4rem;
-  border: 1px solid var(--grid);
-  border-radius: 999px;
-  background: var(--blue-wash);
-  color: var(--blue);
-  font-size: 0.72rem;
-  font-weight: 560;
-  vertical-align: middle;
+.form-block {
+  border-top: 1px solid var(--ink);
+  padding-top: 1rem;
 }
-.card {
-  border: 1px solid var(--grid);
-  border-bottom-color: var(--graphite);
-  background: var(--sheet);
-  padding: 1rem;
+.form-block h3 {
+  margin-top: 0;
 }
 .row {
   display: flex;

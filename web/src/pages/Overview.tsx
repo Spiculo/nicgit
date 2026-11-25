@@ -138,7 +138,7 @@ export function Overview() {
             </button>
             <ElementPanel guid={sel.guid} props={sel.props} rev={head.head} />
             {ctx.can('reviewer') && (
-              <p style={{ marginTop: '1rem' }}>
+              <p className="row" style={{ marginTop: '1rem' }}>
                 <Link className="btn" to={`${ctx.base}/issues/new?element=${encodeURIComponent(sel.guid)}&version=${head.head}`}>
                   {t('issues.new')}
                 </Link>
@@ -179,7 +179,7 @@ export function Overview() {
               <dt>{t('overview.openIssues')}</dt>
               <dd>{overview.open_issues}</dd>
             </dl>
-            <p style={{ marginTop: '1rem' }}>
+            <p className="row" style={{ marginTop: '1rem' }}>
               <a className="btn" href={ctx.api(`/versions/${head.head}/model.ifc`)} download>
                 {t('overview.download')}
               </a>{' '}
