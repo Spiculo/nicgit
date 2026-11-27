@@ -86,6 +86,15 @@ export interface Me {
   email: string
   display_name: string
   lang: 'en' | 'es'
+  style: 'git' | 'architecture'
+  onboarded: boolean
+  work: string
+  years_experience: number | null
+  site_experience: string
+  focus: string
+  company: string
+  team_size: string
+  company_size: string
   is_site_admin: boolean
   orgs: { slug: string; display_name: string; role: string }[]
 }

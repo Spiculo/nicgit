@@ -55,6 +55,8 @@ Customer workflows defined in the project (file location inside the tree to be a
 
 ## Not built yet in NicGit (from the spec)
 
+CI is now built from the existing checks jobs (decision N63); the rest below is unchanged.
+
 - **Ask the model**: questions about a version answered with the engine's read-only agent tools (needs an inventory job and tool calls through the router).
 - **AI version summaries** on the timeline (the proposal summary exists; versions show the engine's counts).
 - **Postgres row-level security** as a second wall behind the per-route checks (the per-route checks and the isolation test exist).

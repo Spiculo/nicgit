@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
 import { useT } from '../i18n'
 import { api, useAction, useApi } from '../lib/api'
 import type { Role } from '../lib/types'
+import { NotFound } from '../components/States'
 import { useProject } from './ProjectLayout'
 
 const ROLES: Role[] = ['viewer', 'reviewer', 'member', 'lead', 'admin']
@@ -19,7 +20,76 @@ interface Rule {
   dismiss_on_push: boolean
 }
 
-function Members() {
+function PageHead({ title }: { title: string }) {
+  return (
+    <header className="page-head">
+      <h1>{title}</h1>
+    </header>
+  )
+}
+
+export function ProjectSettings() {
+  const ctx = useProject()
+  if (!ctx.can('admin')) return <NotFound />
+  return (
+    <main className="page page-settings">
+      <Outlet />
+    </main>
+  )
+}
+
+export function SettingsGeneral() {
+  const t = useT()
+  const ctx = useProject()
+  const p = ctx.overview.project
+  const [description, setDescription] = useState(p.description)
+  const [visibility, setVisibility] = useState(p.visibility)
+  const [def, setDef] = useState(p.default_option)
+  const save = useAction(
+    () => api(ctx.api(), { method: 'PATCH', json: { description, visibility, default_option: def } }),
+    [[ctx.api('/overview')]],
+  )
+  return (
+    <section>
+      <PageHead title={t('settings.general')} />
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          save.mutate(undefined)
+        }}
+      >
+        <div className="field">
+          <label htmlFor="d">{t('project.description')}</label>
+          <input id="d" value={description} onChange={(e) => setDescription(e.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor="v">{t('project.visibility')}</label>
+          <select id="v" value={visibility} onChange={(e) => setVisibility(e.target.value as 'private' | 'public')}>
+            <option value="private">{t('project.private')}</option>
+            <option value="public">{t('project.public')}</option>
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="o">{t('settings.defaultOption')}</label>
+          <select id="o" value={def} onChange={(e) => setDef(e.target.value)}>
+            {[def, ...ctx.overview.options.map((o) => o.name).filter((n) => n !== def)].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="row">
+          <button className="btn-primary">{t('settings.save')}</button>
+          {save.isSuccess && <span className="muted">{t('settings.saved')}</span>}
+        </div>
+        {save.error && <p className="error">{save.error.message}</p>}
+      </form>
+    </section>
+  )
+}
+
+export function SettingsPeople() {
   const t = useT()
   const ctx = useProject()
   const members = useApi<{ slug: string; role: Role; via: string }[]>(ctx.api('/members'))
@@ -29,28 +99,11 @@ function Members() {
   const set = useAction((v: { who: string; role: Role }) => api(ctx.api(`/members/${v.who}`), { method: 'PUT', json: { role: v.role } }), [key])
   const remove = useAction((w: string) => api(ctx.api(`/members/${w}`), { method: 'DELETE' }), [key])
   return (
-    <section id="members" className="stack">
-      <h2>{t('settings.members')}</h2>
-      <table className="schedule">
-        <tbody>
-          {members.data?.map((m) => (
-            <tr key={`${m.slug}-${m.via}`}>
-              <td>{m.slug}</td>
-              <td>{t(`role.${m.role}`)}</td>
-              <td className="muted small">{m.via}</td>
-              <td className="num">
-                {m.via === 'project' && (
-                  <button type="button" className="btn-quiet" onClick={() => remove.mutate(m.slug)}>
-                    {t('common.remove')}
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <section>
+      <PageHead title={t('settings.members')} />
       <form
         className="row"
+        style={{ marginBottom: '1.25rem' }}
         onSubmit={(e) => {
           e.preventDefault()
           set.mutate({ who, role })
@@ -65,8 +118,39 @@ function Members() {
             </option>
           ))}
         </select>
-        <button>{t('settings.addMember')}</button>
+        <button className="btn-primary">{t('settings.addMember')}</button>
       </form>
+      {members.isLoading && <p className="muted">{t('common.loading')}</p>}
+      {members.error && <p className="notice bad">{members.error.message}</p>}
+      {members.data?.length === 0 && <p className="muted small">{t('settings.noMembers')}</p>}
+      {!!members.data?.length && (
+        <table className="schedule">
+          <thead>
+            <tr>
+              <th>{t('auth.slug')}</th>
+              <th>{t('settings.role')}</th>
+              <th>{t('settings.via')}</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {members.data.map((m) => (
+              <tr key={`${m.slug}-${m.via}`}>
+                <td>{m.slug}</td>
+                <td>{t(`role.${m.role}`)}</td>
+                <td className="muted small">{m.via === 'project' ? t('settings.viaProject') : t('settings.viaOrg')}</td>
+                <td className="num">
+                  {m.via === 'project' && (
+                    <button type="button" className="btn-quiet" onClick={() => remove.mutate(m.slug)}>
+                      {t('common.remove')}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       {set.error && <p className="error">{set.error.message}</p>}
     </section>
   )
@@ -78,8 +162,7 @@ function RuleEditor({ rule, onSave, onRemove }: { rule: Rule; onSave: (r: Rule) 
   const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
   return (
     <form
-      className="stack"
-      style={{ borderTop: '1px solid var(--grid)', paddingTop: '1rem' }}
+      className="stack rule"
       onSubmit={(e) => {
         e.preventDefault()
         onSave(r)
@@ -147,7 +230,7 @@ const NEW_RULE: Rule = {
   dismiss_on_push: true,
 }
 
-function Rules() {
+export function SettingsRules() {
   const t = useT()
   const ctx = useProject()
   const rules = useApi<{ rules: Rule[]; settings_keys: string[] }>(ctx.api('/rules'))
@@ -156,9 +239,14 @@ function Rules() {
   const remove = useAction((o: string) => api(ctx.api(`/rules/${encodeURIComponent(o)}`), { method: 'DELETE' }), [key])
   const [adding, setAdding] = useState(false)
   return (
-    <section id="rules" className="stack">
-      <h2>{t('settings.rules')}</h2>
-      {rules.data?.rules.map((r) => <RuleEditor key={r.option} rule={r} onSave={(x) => save.mutate(x)} onRemove={() => remove.mutate(r.option)} />)}
+    <section>
+      <PageHead title={t('settings.rules')} />
+      {rules.isLoading && <p className="muted">{t('common.loading')}</p>}
+      {rules.error && <p className="notice bad">{rules.error.message}</p>}
+      {rules.data?.rules.length === 0 && <p className="muted small">{t('settings.noRules')}</p>}
+      {rules.data?.rules.map((r) => (
+        <RuleEditor key={r.option} rule={r} onSave={(x) => save.mutate(x)} onRemove={() => remove.mutate(r.option)} />
+      ))}
       {adding ? (
         <RuleEditor
           rule={NEW_RULE}
@@ -168,7 +256,7 @@ function Rules() {
           }}
         />
       ) : (
-        <button type="button" onClick={() => setAdding(true)}>
+        <button type="button" style={{ marginTop: '1.25rem' }} onClick={() => setAdding(true)}>
           {t('settings.addRule')}
         </button>
       )}
@@ -177,64 +265,41 @@ function Rules() {
   )
 }
 
-function General() {
+export function SettingsWebhooks() {
   const t = useT()
-  const ctx = useProject()
-  const p = ctx.overview.project
-  const [description, setDescription] = useState(p.description)
-  const [visibility, setVisibility] = useState(p.visibility)
-  const [def, setDef] = useState(p.default_option)
-  const save = useAction(() => api(ctx.api(), { method: 'PATCH', json: { description, visibility, default_option: def } }), [[ctx.api('/overview')]])
   return (
-    <form
-      id="general"
-      className="stack"
-      onSubmit={(e) => {
-        e.preventDefault()
-        save.mutate(undefined)
-      }}
-    >
-      <h2>{t('settings.general')}</h2>
-      <div className="field">
-        <label htmlFor="d">{t('project.description')}</label>
-        <input id="d" value={description} onChange={(e) => setDescription(e.target.value)} />
+    <section>
+      <PageHead title={t('config.webhooks')} />
+      <div className="empty">
+        <p>{t('config.empty')}</p>
       </div>
-      <div className="field">
-        <label htmlFor="v">{t('project.visibility')}</label>
-        <select id="v" value={visibility} onChange={(e) => setVisibility(e.target.value as 'private' | 'public')}>
-          <option value="private">{t('project.private')}</option>
-          <option value="public">{t('project.public')}</option>
-        </select>
-      </div>
-      <div className="field">
-        <label htmlFor="o">{t('settings.defaultOption')}</label>
-        <select id="o" value={def} onChange={(e) => setDef(e.target.value)}>
-          {[def, ...ctx.overview.options.map((o) => o.name).filter((n) => n !== def)].map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="row">
-        <button className="btn-primary">{t('settings.save')}</button>
-        {save.isSuccess && <span className="muted">{t('settings.saved')}</span>}
-      </div>
-    </form>
+    </section>
   )
 }
 
-function Danger() {
+export function SettingsAudit() {
+  const t = useT()
+  return (
+    <section>
+      <PageHead title={t('config.audit')} />
+      <div className="empty">
+        <p>{t('config.empty')}</p>
+      </div>
+    </section>
+  )
+}
+
+export function SettingsDanger() {
   const t = useT()
   const ctx = useProject()
   const nav = useNavigate()
   const [confirm, setConfirm] = useState('')
   return (
-    <section id="danger" className="stack">
-      <h2>{t('settings.danger')}</h2>
+    <section>
+      <PageHead title={t('settings.danger')} />
       <p>{t('settings.deleteConfirm')}</p>
       <div className="row">
-        <input value={confirm} onChange={(e) => setConfirm(e.target.value)} aria-label={t('project.name')} style={{ maxWidth: '16rem' }} />
+        <input value={confirm} onChange={(e) => setConfirm(e.target.value)} aria-label={t('project.name')} placeholder={t('project.name')} style={{ maxWidth: '16rem' }} />
         <button
           type="button"
           className="btn-danger"
@@ -248,33 +313,5 @@ function Danger() {
         </button>
       </div>
     </section>
-  )
-}
-
-function Placeholder({ id, title, body, link }: { id: string; title: string; body: string; link?: { to: string; label: string } }) {
-  return (
-    <section id={id} className="stack">
-      <h2>{title}</h2>
-      <p>{body}</p>
-      {link && <Link to={link.to}>{link.label}</Link>}
-    </section>
-  )
-}
-
-export function ProjectSettings() {
-  const t = useT()
-  return (
-    <main className="page stack" style={{ maxWidth: '52rem' }}>
-      <h1>{t('settings.title')}</h1>
-      <p className="muted">{t('settings.subtitle')}</p>
-      <General />
-      <Members />
-      <Rules />
-      <Placeholder id="ai" title={t('settings.ai')} body={t('config.aiBody')} link={{ to: '/account', label: t('config.openAccount') }} />
-      <Placeholder id="budgets" title={t('config.budgets')} body={t('config.budgetsBody')} link={{ to: '/account', label: t('config.openAccount') }} />
-      <Placeholder id="webhooks" title={t('config.webhooks')} body={t('config.webhooksBody')} />
-      <Placeholder id="audit" title={t('config.audit')} body={t('config.auditBody')} />
-      <Danger />
-    </main>
   )
 }

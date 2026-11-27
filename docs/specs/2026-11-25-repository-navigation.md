@@ -1,16 +1,18 @@
-# Repository navigation: GitHub-shaped tabs and contextual sidebars
+# Repository navigation: GitHub-shaped tabs and settings pages
 
-**Status:** Shell implemented; pages marked “not built” are specified here · **Date:** 2026-11-25
+**Status:** Shell and settings pages implemented; CI is built; other unbuilt tabs show one empty state · **Date:** 2026-11-25 (CI added 2026-11-27)
 **Scope:** NicGit web app · **Related:** [files-first diff viewer](2026-11-25-files-first-diff-viewer.md),
-[GPU render service](2026-11-25-gpu-render-service.md), decisions N51–N58
+[GPU render service](2026-11-25-gpu-render-service.md), decisions N51–N59
 
 GitHub's information architecture, adapted to buildings. A project has a **repository tab bar** and,
-only where a tab has several spaces, a **contextual sidebar**. Code does not get a sidebar; Configs
-does. The visual language stays the existing trace-paper/ruled-schedule system (N55): no card grids,
-no second design system.
+only where a tab has several real pages, a **settings side rail**. Code does not get a sidebar;
+Configs does. The visual language stays the existing trace-paper/ruled-schedule system (N55): no card
+grids, no second design system.
 
-The shell is built. All existing pages were mapped into it. Tabs whose pages are not built show what
-they will contain and link to their spec; they have no fake data and no dead controls.
+The shell is built. All existing pages were mapped into it. Tabs whose pages are not built show a
+single empty state with no fake data, no dead controls and no description of the future page.
+Editorial paragraphs are not rendered in the UI; help for a non-obvious field sits behind an `(i)`
+control (N59).
 
 ---
 
@@ -23,16 +25,19 @@ Order left to right:
 | **Code** | `/` and code sub-pages | Built | No (horizontal sub-nav) |
 | **Pull requests** | `/proposals` | Built (proposals) | No |
 | **Issues** | `/issues` | Built | No |
-| **Preview** | `/preview` | Shell + current diff link | Yes: Current / Next / Files |
-| **CI** | `/ci` | Specified, not built | Yes: Runs / Checks / Schedules / Budgets |
-| **Renders** | `/renders` | Specified, not built | Yes: Jobs / Presets / GPU usage |
-| **Sheets** | `/sheets` | Specified, not built | Yes: Sheets / Drawings and PDFs / Revisions |
-| **Packages** | `/packages` | Specified, not built | Yes: Objects / Libraries / Rule packs |
-| **Agents** | `/agents` | Specified, not built | Yes: Sessions / Tools / Approvals |
-| **Configs** | `/settings` | Built + placeholders | Yes: General / People / Protected options / AI / Budgets / Webhooks / Audit / Delete |
+| **Preview** | `/preview` | Built (latest version and downloads) | No |
+| **CI** | `/ci` | Built (reads the existing checks jobs) | No |
+| **Renders** | `/renders` | Not built | No |
+| **Sheets** | `/sheets` | Not built | No |
+| **Packages** | `/packages` | Not built | No |
+| **Agents** | `/agents` | Not built | No |
+| **Configs** | `/settings` and settings sub-pages | Built + placeholders | Yes: General / People / Protected options / Webhooks / Audit log / Delete |
 
 Counts: Pull requests and Issues show their open counts in the tab, like GitHub. Configs is visible
-to admins only. No tab is a marketing page; every route stays inside the signed-in project.
+to admins only. No tab is a marketing page; every route stays inside the signed-in project. An
+unbuilt tab opens one empty state (`No runs yet.`, `No renders yet.`, and so on) and nothing else.
+Tab labels follow the account's wording style (N61): the same tab bar reads Code / Pull requests /
+Issues for a Git account, or Project / Proposals / Tasks for an architectural one.
 
 ## 2. Code
 
@@ -45,9 +50,10 @@ Code is the repository landing and has a **horizontal sub-nav**, not a sidebar:
 - **Files** is the repository file browser and raw record/JSON view.
 - **Versions**, **Branches**, **Compare**, **Releases** (milestones + tags) and **Activity** keep their
   existing behaviour.
-- The branch selector, clone/download actions and release links live in the page header, as in
-  GitHub; they are not duplicated in a sidebar.
-- Code must not grow a left rail. If a feature needs sections, it gets its own tab with a sidebar.
+- The branch selector lives on Files; clone and download actions live on Overview and Preview;
+  release links live on Releases. They are not duplicated in a sidebar.
+- Code must not grow a left rail. A feature that needs pages gets its own tab, and only
+  settings-style pages get a side rail.
 
 ## 3. Pull requests and Issues
 
@@ -55,44 +61,43 @@ Existing proposals become the **Pull requests** tab; issues stay Issues. Both us
 filters and detail views. No sidebar: the list filters and the detail tabs (Conversation, Changes,
 Checks, Conflicts) are enough.
 
-Naming: the nav says **Pull requests**; the page still explains that a pull request is a *proposal*
-that combines one design option into another. The API and database keep `proposals`.
+Naming: the nav and page say **Pull requests**; the API and database keep `proposals`. The form
+still uses the project language of design options and combining. There is no explanatory paragraph.
 
-## 4. Preview (sidebar: Current / Next / Files)
+## 4. Preview
 
 The Preview tab is the home of the files-first diff direction, not a second full BIM viewer.
 
-- **Current**: a link to the existing 3D diff (Compare) for small projects, with the measured
-  limitation (two full IFCs, one mesh per element).
-- **Next**: the render set from N51/N52 — changed and selected elements only; linked models and
-  libraries as proxies or pinned snapshots.
-- **Files**: downloads for the latest version (IFC, `.nic`, source zip, BCF).
+- It opens on the latest version: message, option, author, date and commit.
+- Actions: open the existing 3D diff (Compare), browse Files, and download IFC, `.nic`, source
+  archive and BCF for that version.
+- It has no sidebar and no explanatory copy. When the diff bundle exists, the Preview tab becomes
+  the 3D + plan diff page and the link to the old Compare is removed.
 
-When the diff bundle exists, the Preview tab becomes the 3D + plan diff page and the link to the old
-Compare is removed.
+## 5. CI
 
-## 5. CI (sidebar: Runs / Checks / Schedules / Budgets)
-
-The CI tab gives engine checks a home. Today required checks appear only inside a proposal.
+The CI tab reads the checks jobs the Actions runner already produced. It lists runs and required
+checks, expands a run's issues, and links a printable report. It does not queue work yet.
 
 ### Contract
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/projects/{owner}/{slug}/ci/runs?option=&limit=` | Check jobs per version/option |
+| `GET` | `/api/projects/{owner}/{slug}/ci/runs?option=&rev=&limit=` | Check jobs per version/option |
 | `GET` | `/api/projects/{owner}/{slug}/ci/runs/{id}` | One run: kind, commit, status, duration, report |
-| `GET` | `/api/projects/{owner}/{slug}/ci/checks` | Required checks per protected option and their last result |
-| `GET` | `/api/projects/{owner}/{slug}/ci/report/{id}.html` | Stored report (IDS/clash/model) |
+| `GET` | `/api/projects/{owner}/{slug}/ci/checks` | Required checks per option and their last result |
+| `GET` | `/api/projects/{owner}/{slug}/ci/runs/{id}/report.html` | Printable report generated from the job result |
 
 - A run is the existing `jobs` row of kind `checks`, with `args.rev`, `result.passed`, `result.report`.
 - The page lists commit, option, checks (schema/IDS/clash/model), pass/fail, duration and a report link.
 - A required check that fails blocks a Combine (already enforced); the CI page shows the same result.
-- Schedules (nightly checks) and budgets are placeholders until Actions get their own runner.
+- Schedules (nightly checks) and budgets are future work until Actions get their own runner.
 - No new execution model: CI displays what Actions already run; the runner stays out of scope.
 
-## 6. Renders (sidebar: Jobs / Presets / GPU usage)
+## 6. Renders
 
-The tab that owns the [GPU render service](2026-11-25-gpu-render-service.md).
+The tab that owns the [GPU render service](2026-11-25-gpu-render-service.md). Today it shows
+`No renders yet.`.
 
 - **Jobs**: queued/running/finished, recipe, version, GPU class, progress, actual cost, frames.
 - **Presets**: the recipes a studio keeps; a recipe is a file, not a server-side blob.
@@ -101,10 +106,10 @@ The tab that owns the [GPU render service](2026-11-25-gpu-render-service.md).
 No render is implemented yet. The CLI (`nicbim render`) is specified in the render service spec; the
 web page will read the same API.
 
-## 7. Sheets (sidebar: Sheets / Drawings and PDFs / Revisions)
+## 7. Sheets
 
 This is the missing deliverables space. Sheets are **files generated by the engine**, not browser
-drawings.
+drawings. Today the tab shows `No sheets yet.`
 
 ### Contract
 
@@ -134,21 +139,22 @@ Rules:
 The worker needs Qt offscreen in the runtime; that is a separate `deliverables` worker image, not the
 current Python-only engine worker. This is why Sheets is a spec, not a button that pretends to work.
 
-## 8. Packages (sidebar: Objects / Libraries / Rule packs)
+## 8. Packages
 
-The object-library and package registry space.
+The object-library and package registry space. Today the tab shows `No packages yet.`
 
 - **Objects**: `.nicobj` definitions and versions, scoped to an account, public or private.
 - **Libraries**: office libraries and IFC type libraries, pinned by content hash; a project version
   records which library hash it used, so the web can say `library_pinned` or `library_missing`.
 - **Rule packs**: IDS/code/check packs a project can require.
-- Backed by the package registry in [future work](../future-work.md) (not built). The tab exists so
-  object libraries are not hidden inside settings; the first implementation can be a list of pinned
-  library hashes and downloads, then grow into upload/versioning.
+- Backed by the package registry in [future work](../future-work.md) (not built). The first
+  implementation can be a list of pinned library hashes and downloads, then grow into
+  upload/versioning.
 
-## 9. Agents (sidebar: Sessions / Tools / Approvals)
+## 9. Agents
 
 The agent space that NicBim already has locally, moved to the repository where a team can see it.
+Today the tab shows `No agents yet.`
 
 - **Sessions**: an agent session, the option it works in, transcript and status.
 - **Tools**: the tool catalogue and the role each tool needs; read-only tools are safe, write tools
@@ -158,21 +164,37 @@ The agent space that NicBim already has locally, moved to the repository where a
   worktrees; the server-side session/tool contract is future work. No agent runs automatically on a
   push.
 
-## 10. Configs (sidebar: General / People / Protected options / AI / Budgets / Webhooks / Audit / Delete)
+## 10. Configs
 
-The existing project settings, given the “more configs space” that was missing.
+The project settings, split into pages with a side rail. Each page saves on its own; a save does not
+throw away fields on another page. The sidebar navigates to routes and marks the current page.
 
-- **General**: description, visibility, default option. Built.
-- **People**: project members and roles. Built.
-- **Protected options**: approvals, allowed conflict modes, required checks, protected settings. Built.
-- **AI**: per-account, not per-project; the section explains this and links to Account. Placeholder.
-- **Budgets**: monthly Action/AI limits on the account; links to Account. Placeholder.
-- **Webhooks**: outgoing notifications. Placeholder.
-- **Audit log**: the server records it; the viewer is not built. Placeholder.
-- **Delete**: typed confirmation. Built.
+| Page | Route | Status |
+|---|---|---|
+| **General** | `/settings/general` | Built: description, visibility, default option |
+| **People** | `/settings/people` | Built: project members and roles |
+| **Protected options** | `/settings/rules` | Built: approvals, conflict modes, required checks, protected settings |
+| **Webhooks** | `/settings/webhooks` | Empty state |
+| **Audit log** | `/settings/audit` | Empty state |
+| **Delete project** | `/settings/danger` | Built: typed confirmation |
 
-The sidebar is anchors on one page. New sections get an id and an entry; the page stays a single
-scroll so a save does not throw away the other fields.
+`/settings` redirects to `/settings/general`. AI summaries and budgets are **account** settings, not
+project settings, and live in the account pages below.
+
+### Account settings
+
+Account settings use the same side rail outside a project:
+
+| Page | Route | Content |
+|---|---|---|
+| **Profile** | `/settings/profile` | Display name, email, user name |
+| **Access** | `/settings/access` | Personal access tokens |
+| **Language & wording** | `/settings/appearance` | Language and Git/architectural wording |
+| **Organisations** | `/settings/organizations` | Membership and new organisation |
+| **AI** | `/settings/ai` | Account AI switch and router state |
+| **Billing** | `/settings/billing` | Storage, per-project and per-file limits, monthly usage |
+
+`/account` redirects to `/settings/profile`.
 
 ## 11. Compatibility and dependencies
 
@@ -191,11 +213,12 @@ The tab shell does not change the data model, but it exposes two things that mus
 - Leads manage protected options and releases; admins see Configs and People.
 - The sidebar hides nothing that the API would allow; each page still enforces the role server-side.
 - A private project remains 404 for anyone without access, including every tab route.
+- A non-admin who opens a settings route directly gets the not-found page, not the settings form.
 
 ## 13. Mobile and small screens
 
 - The tab bar scrolls horizontally; it never wraps into a second row.
-- A contextual sidebar becomes a horizontal sub-nav above the content.
+- The Configs side rail becomes a horizontal sub-nav above the content; account settings do the same.
 - The Code sub-nav scrolls horizontally; it does not become a drawer.
 - Tables keep their horizontal scroll; no card fallback that changes the information.
 
@@ -203,19 +226,25 @@ The tab shell does not change the data model, but it exposes two things that mus
 
 1. Every existing page is reachable from the tab/sub-nav; no dead link.
 2. Pull requests and Issues show open counts; Configs is admin-only.
-3. Code has no sidebar; Configs, CI, Renders, Sheets, Packages, Agents and Preview do.
-4. Each sidebar link reaches a section with that id; the page scrolls and highlights the section.
-5. Unbuilt tabs have no fake data: they describe the planned data and the spec.
+3. Code has no sidebar; among project tabs, only Configs has a side rail.
+4. Each Configs sidebar link opens its own route and the active page is highlighted.
+5. Unbuilt tabs show one empty state: no fake data, no dead controls and no description of the
+   future page.
 6. A viewer cannot reach Configs; the API still returns 404/403.
-7. The layout holds at 1,280 px and at 800 px; no horizontal page scroll outside tables.
-8. The UI uses the existing `.schedule`, `.tag`, `.btn`, `.form-block` language (N55).
+7. Account settings are split into pages under `/settings` (Profile, Access, Language & wording,
+   Organisations, AI, Billing); `/account` redirects to Profile.
+8. Explanatory prose is not rendered in page bodies. Help for a non-obvious field sits behind an
+   `(i)` control; empty states keep one short line.
+9. The layout holds at 1,280 px and at 800 px; page content is centred at the same maximum width, with
+   no unexplained gap on the right.
+10. The UI uses the existing `.schedule`, `.tag`, `.btn`, `.form-block` language (N55).
 
 ## 15. Implementation sequence
 
-1. **Done:** tab bar, Code sub-nav, sidebars, Preview shell, Configs anchors, placeholder tabs,
-   i18n EN/ES.
+1. **Done:** tab bar, Code sub-nav, settings side rails and page routes, Preview page, empty tabs,
+   account settings pages, i18n EN/ES.
 2. **Sheets:** `sheets`/`sheet_export` engine job, deliverables worker with Qt offscreen, API, page.
-3. **CI:** read the existing check jobs, one run list, report downloads.
+3. **CI:** done: read the existing check jobs, one run list, report downloads.
 4. **Renders:** follow the render service spec; Jobs/Presets/Usage pages.
 5. **Packages:** pinned library list first, then upload/versioning.
 6. **Agents:** server-side sessions and approvals, after the desktop session work.

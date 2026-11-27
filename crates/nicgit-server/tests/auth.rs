@@ -33,6 +33,59 @@ async fn pat_authenticates_api() {
 }
 
 #[tokio::test]
+async fn wording_style_is_per_user() {
+    let app = common::TestApp::spawn().await;
+    let alice = app.user("alice").await;
+    let bob = app.user("bob").await;
+    let me: Value = alice.get(app.url("/api/me")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(me["style"], "git");
+    let r = alice.patch(app.url("/api/me")).json(&json!({"style": "architecture"})).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    let me: Value = alice.get(app.url("/api/me")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(me["style"], "architecture");
+    let other: Value = bob.get(app.url("/api/me")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(other["style"], "git", "the setting belongs to one account");
+    let r = alice.patch(app.url("/api/me")).json(&json!({"style": "unknown"})).send().await.unwrap();
+    assert_eq!(r.status(), 400);
+}
+
+#[tokio::test]
+async fn onboarding_sets_the_work_profile() {
+    let app = common::TestApp::spawn().await;
+    let alice = app.user("alice").await;
+    let me: Value = alice.get(app.url("/api/me")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(me["onboarded"], false);
+    assert_eq!(me["work"], "");
+
+    let body = json!({
+        "lang": "es", "style": "architecture", "work": "architect", "years_experience": 12,
+        "site_experience": "regular", "focus": "residential", "company": "Estudio Norte",
+        "team_size": "six_to_twenty", "company_size": "eleven_to_fifty",
+    });
+    let r = alice.post(app.url("/api/me/onboarding")).json(&body).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    let me: Value = alice.get(app.url("/api/me")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(me["onboarded"], true);
+    assert_eq!(me["lang"], "es");
+    assert_eq!(me["style"], "architecture");
+    assert_eq!(me["work"], "architect");
+    assert_eq!(me["years_experience"], 12);
+    assert_eq!(me["site_experience"], "regular");
+    assert_eq!(me["focus"], "residential");
+    assert_eq!(me["company"], "Estudio Norte");
+    assert_eq!(me["team_size"], "six_to_twenty");
+    assert_eq!(me["company_size"], "eleven_to_fifty");
+
+    let bad = json!({
+        "lang": "en", "style": "git", "work": "wizard", "years_experience": 3,
+        "site_experience": "none",
+    });
+    assert_eq!(alice.post(app.url("/api/me/onboarding")).json(&bad).send().await.unwrap().status(), 400);
+    let bad = json!({"lang": "fr", "style": "git", "work": "architect", "years_experience": 3, "site_experience": "none"});
+    assert_eq!(alice.post(app.url("/api/me/onboarding")).json(&bad).send().await.unwrap().status(), 400);
+}
+
+#[tokio::test]
 async fn revoked_token_401() {
     let app = common::TestApp::spawn().await;
     let alice = app.user("alice").await;

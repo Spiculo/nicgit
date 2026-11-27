@@ -36,7 +36,7 @@ export function Versions() {
   const last = list.data?.[list.data.length - 1]
   return (
     <main className="page">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+      <header className="page-head">
         <h1>{t('versions.title', { option: optionLabel(option) })}</h1>
         <select aria-label={t('title.option')} value={option} onChange={(e) => setParams({ option: e.target.value })} style={{ width: 'auto' }}>
           {ctx.overview.options.map((o) => (
@@ -45,7 +45,7 @@ export function Versions() {
             </option>
           ))}
         </select>
-      </div>
+      </header>
       {list.isLoading && <Loading />}
       <ErrorNote error={list.error} />
       {list.data?.length === 0 && <p className="empty">{t('versions.empty')}</p>}

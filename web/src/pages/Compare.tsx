@@ -163,33 +163,36 @@ export function Compare() {
   const active = params.get('from') && params.get('to')
   return (
     <div style={{ display: 'grid', gridTemplateRows: 'auto 1fr', height: '100%' }}>
-      <form
-        className="row"
-        style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--grid)', background: 'var(--sheet)' }}
-        onSubmit={(e) => {
-          e.preventDefault()
-          setParams({ from, to })
-        }}
-      >
-        <strong>{t('compare.title')}</strong>
-        <label className="row" style={{ fontWeight: 400 }}>
-          {t('compare.from')}
-          <input list="revs" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: '14rem' }} />
-        </label>
-        <label className="row" style={{ fontWeight: 400 }}>
-          {t('compare.to')}
-          <input list="revs" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: '14rem' }} />
-        </label>
-        <datalist id="revs">
-          {opts.map((o) => (
-            <option key={o.name} value={o.name}>
-              {o.label}
-            </option>
-          ))}
-          {ctx.overview.milestones?.map((m) => <option key={m.name} value={m.name} />)}
-        </datalist>
-        <button className="btn-primary">{t('compare.run')}</button>
-      </form>
+      <div className="compare-bar">
+        <div className="shell">
+          <h1>{t('compare.title')}</h1>
+          <form
+            className="row"
+            onSubmit={(e) => {
+              e.preventDefault()
+              setParams({ from, to })
+            }}
+          >
+            <label className="row" style={{ fontWeight: 400 }}>
+              {t('compare.from')}
+              <input list="revs" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: '14rem' }} />
+            </label>
+            <label className="row" style={{ fontWeight: 400 }}>
+              {t('compare.to')}
+              <input list="revs" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: '14rem' }} />
+            </label>
+            <datalist id="revs">
+              {opts.map((o) => (
+                <option key={o.name} value={o.name}>
+                  {o.label}
+                </option>
+              ))}
+              {ctx.overview.milestones?.map((m) => <option key={m.name} value={m.name} />)}
+            </datalist>
+            <button className="btn-primary">{t('compare.run')}</button>
+          </form>
+        </div>
+      </div>
       {active ? <CompareView key={`${params.get('from')}..${params.get('to')}`} from={params.get('from')!} to={params.get('to')!} /> : null}
     </div>
   )

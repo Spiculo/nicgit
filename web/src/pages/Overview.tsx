@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useLang, useT } from '../i18n'
-import { useApi, useJob, useMe } from '../lib/api'
+import { useApi, useJob } from '../lib/api'
 import { optionLabel, optionPath, shortId, when, ifcClass } from '../lib/format'
 import type { Version } from '../lib/types'
 import { Viewer } from '../viewer/Viewer'
@@ -10,6 +10,7 @@ import type { PropertyGroup } from '../viewer/ifc'
 import { useProject } from './ProjectLayout'
 import { JobWait } from '../components/States'
 import { JobDownload } from '../components/JobDownload'
+import { Info } from '../components/Info'
 
 export function TitleBlock({ title, option, version }: { title: string; option: string; version?: Version | null }) {
   const t = useT()
@@ -41,24 +42,62 @@ export function TitleBlock({ title, option, version }: { title: string; option: 
   )
 }
 
-function EmptyProject() {
+function CopyAddress({ value }: { value: string }) {
+  const t = useT()
+  const [copied, setCopied] = useState(false)
+  return (
+    <div className="row" style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <code className="small" style={{ overflowWrap: 'anywhere', flex: 1 }}>{value}</code>
+      <button
+        type="button"
+        className="btn-quiet"
+        onClick={async () => {
+          await navigator.clipboard.writeText(value)
+          setCopied(true)
+          window.setTimeout(() => setCopied(false), 1500)
+        }}
+      >
+        {copied ? t('common.copied') : t('overview.copyAddress')}
+      </button>
+    </div>
+  )
+}
+
+function ConnectPanel({ compact = false }: { compact?: boolean }) {
   const t = useT()
   const { overview } = useProject()
-  const me = useMe()
+  return (
+    <div className="stack">
+      <p className="small muted">{t('overview.connectBody')}</p>
+      <CopyAddress value={overview.clone_url} />
+      <p className="small">{t('overview.cloneInApp')}</p>
+      {!compact && (
+        <>
+          <p className="small">
+            {t('overview.tokenHint')}{' '}
+            <Link to="/settings/access">{t('account.tokens')}</Link>
+          </p>
+          <details>
+            <summary className="small">{t('overview.commandLine')}</summary>
+            <pre className="code muted" style={{ whiteSpace: 'pre-wrap', marginTop: '0.5rem' }}>
+              {`git clone ${overview.clone_url}`}
+            </pre>
+          </details>
+        </>
+      )}
+    </div>
+  )
+}
+
+function EmptyProject() {
+  const t = useT()
   return (
     <div className="page">
-      <div className="empty stack">
-        <h2>{t('overview.empty')}</h2>
-        <p>{t('overview.emptyHint')}</p>
-        <p>
-          <code>{overview.clone_url}</code>
-        </p>
-        <pre className="code muted" style={{ whiteSpace: 'pre-wrap' }}>
-          {`kimbim versions remotes --add nicgit=${overview.clone_url}\nkimbim versions push nicgit\n# user: ${me.data?.slug ?? 'you'}  password: a token from Account`}
-        </pre>
-        <p>
-          <Link to="/account">{t('account.tokens')}</Link>
-        </p>
+      <div className="empty empty-doc stack">
+        <h2>
+          {t('overview.empty')} <Info text={t('overview.emptyHint')} />
+        </h2>
+        <ConnectPanel />
       </div>
     </div>
   )
@@ -192,12 +231,7 @@ export function Overview() {
               </a>
             </p>
             <h3>{t('overview.clone')}</h3>
-            <code className="small" style={{ overflowWrap: 'anywhere' }}>
-              {overview.clone_url}
-            </code>
-            <p className="small muted" style={{ marginTop: '1rem' }}>
-              {t('viewer.select')}
-            </p>
+            <ConnectPanel compact />
           </>
         )}
       </aside>

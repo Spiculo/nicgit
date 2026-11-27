@@ -49,7 +49,9 @@ export function Milestones() {
   const ordered = [...(list.data ?? [])].sort((a, b) => PHASES.indexOf(a.phase) - PHASES.indexOf(b.phase))
   return (
     <main className="page stack">
-      <h1>{t('milestones.title')}</h1>
+      <header className="page-head">
+        <h1>{t('milestones.title')}</h1>
+      </header>
       {list.isLoading && <Loading />}
       <ErrorNote error={list.error} />
       {list.data?.length === 0 && <p className="empty">{t('milestones.empty')}</p>}
@@ -57,7 +59,7 @@ export function Milestones() {
         <table className="schedule">
           <thead>
             <tr>
-              <th>{t('milestones.phase')}</th>
+              <th className="col-phase">{t('milestones.phase')}</th>
               <th>{t('milestones.tag')}</th>
               <th>{t('milestones.version')}</th>
               <th />
@@ -66,9 +68,10 @@ export function Milestones() {
           <tbody>
             {ordered.map((m) => (
               <tr key={m.id}>
-                <td>{t(`phase.${m.phase}` as Key)}</td>
+                <td className="col-phase">{t(`phase.${m.phase}` as Key)}</td>
                 <td>
                   <strong>{m.title}</strong>
+                  <div className="small muted show-sm">{t(`phase.${m.phase}` as Key)}</div>
                   <div className="small muted">
                     {m.tag}. {m.created_by}, {whenIso(m.created_at, lang)}
                   </div>

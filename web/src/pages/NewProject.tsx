@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useT } from '../i18n'
 import { api, ApiError, useMe } from '../lib/api'
 import type { Project } from '../lib/types'
+import { Info } from '../components/Info'
 
 export function OwnerSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const me = useMe()
@@ -23,7 +24,10 @@ export function NewProject() {
   const t = useT()
   const me = useMe()
   const nav = useNavigate()
-  const [owner, setOwner] = useState(me.data?.slug ?? '')
+  const [params] = useSearchParams()
+  const owners = [me.data?.slug ?? '', ...(me.data?.orgs.filter((o) => o.role === 'lead' || o.role === 'admin').map((o) => o.slug) ?? [])]
+  const requested = params.get('owner')
+  const [owner, setOwner] = useState(requested && owners.includes(requested) ? requested : me.data?.slug ?? '')
   const [slug, setSlug] = useState('')
   const [description, setDescription] = useState('')
   const [visibility, setVisibility] = useState<'private' | 'public'>('private')
@@ -46,9 +50,11 @@ export function NewProject() {
           <OwnerSelect value={owner} onChange={setOwner} />
         </div>
         <div className="field">
-          <label htmlFor="slug">{t('project.name')}</label>
+          <div className="label-row">
+            <label htmlFor="slug">{t('project.name')}</label>
+            <Info text={t('project.nameHint')} />
+          </div>
           <input id="slug" value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} required />
-          <div className="hint">{t('project.nameHint')}</div>
         </div>
         <div className="field">
           <label htmlFor="description">{t('project.description')}</label>

@@ -23,6 +23,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/projects", post(create).get(list_mine))
         .route("/api/explore", get(explore))
+        .route("/api/accounts/{slug}/projects", get(account_projects))
         .route("/api/projects/{owner}/{slug}", get(get_one).patch(update).delete(remove))
         .route("/api/projects/{owner}/{slug}/members", get(members))
         .route("/api/projects/{owner}/{slug}/members/{user}", put(set_member).delete(remove_member))
@@ -106,12 +107,9 @@ async fn create(State(state): State<AppState>, user: CurrentUser, Json(b): Json<
 /// Projects the caller can reach through ownership, organisations, grants or teams.
 async fn list_mine(State(state): State<AppState>, user: CurrentUser) -> ApiResult<Json<Value>> {
     let rows: Vec<Project> = sqlx::query_as(&format!(
-        "SELECT {PROJECT_COLUMNS} FROM projects p JOIN accounts a ON a.id = p.owner_id WHERE \
-           (a.kind = 'user' AND p.owner_id = $1) \
-           OR p.owner_id IN (SELECT org_id FROM org_members WHERE user_id = $1) \
-           OR p.id IN (SELECT project_id FROM project_members WHERE user_id = $1) \
-           OR p.id IN (SELECT tpa.project_id FROM team_project_access tpa JOIN team_members tm ON tm.team_id = tpa.team_id WHERE tm.user_id = $1) \
-         ORDER BY a.slug, p.slug"
+        "SELECT {PROJECT_COLUMNS} FROM projects p JOIN accounts a ON a.id = p.owner_id \
+         WHERE {} ORDER BY a.slug, p.slug",
+        access::ACCESSIBLE_PROJECTS
     ))
     .bind(user.id)
     .fetch_all(&state.db)
@@ -119,6 +117,46 @@ async fn list_mine(State(state): State<AppState>, user: CurrentUser) -> ApiResul
     let mut out = Vec::with_capacity(rows.len());
     for p in rows {
         let role = access::project_role(&state, Some(user.id), &p).await?;
+        out.push(p.to_json(role));
+    }
+    Ok(Json(json!(out)))
+}
+
+/// Projects owned by one account that the caller may read: public projects, plus everything a
+/// signed-in caller reaches through the account, an organisation, a project grant or a team grant.
+async fn account_projects(
+    State(state): State<AppState>,
+    MaybeUser(user): MaybeUser,
+    Path(slug): Path<String>,
+) -> ApiResult<Json<Value>> {
+    let owner: Option<(Uuid, String)> = sqlx::query_as("SELECT id, kind FROM accounts WHERE slug = $1").bind(&slug).fetch_optional(&state.db).await?;
+    let (owner_id, _kind) = owner.ok_or_else(AppError::not_found)?;
+    let rows: Vec<Project> = match &user {
+        Some(u) => {
+            sqlx::query_as(&format!(
+                "SELECT {PROJECT_COLUMNS} FROM projects p JOIN accounts a ON a.id = p.owner_id \
+                 WHERE p.owner_id = $2 AND (p.visibility = 'public' OR {}) \
+                 ORDER BY p.created_at DESC LIMIT 100",
+                access::ACCESSIBLE_PROJECTS
+            ))
+            .bind(u.id)
+            .bind(owner_id)
+            .fetch_all(&state.db)
+            .await?
+        }
+        None => {
+            sqlx::query_as::<_, Project>(&format!(
+                "SELECT {PROJECT_COLUMNS} FROM projects p JOIN accounts a ON a.id = p.owner_id \
+                 WHERE p.owner_id = $1 AND p.visibility = 'public' ORDER BY p.created_at DESC LIMIT 100"
+            ))
+            .bind(owner_id)
+            .fetch_all(&state.db)
+            .await?
+        }
+    };
+    let mut out = Vec::with_capacity(rows.len());
+    for p in rows {
+        let role = access::project_role(&state, user.as_ref().map(|u| u.id), &p).await?;
         out.push(p.to_json(role));
     }
     Ok(Json(json!(out)))

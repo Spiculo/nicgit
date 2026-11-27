@@ -44,7 +44,7 @@ export function Issues() {
   }
   return (
     <main className="page">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+      <header className="page-head">
         <h1>{t('issues.title')}</h1>
         <div className="row">
           <a className="btn" href={ctx.api('/issues/export.bcfzip')}>
@@ -62,7 +62,7 @@ export function Issues() {
             </>
           )}
         </div>
-      </div>
+      </header>
       {error && <p className="notice bad">{error}</p>}
       <div className="tabs" role="tablist">
         {(['open', 'closed'] as const).map((s) => (
@@ -86,9 +86,13 @@ export function Issues() {
                 <div className="small muted">
                   {i.author}, {whenIso(i.created_at, lang)}
                 </div>
+                <div className="small muted show-sm">
+                  {i.priority}
+                  {i.assignee ? ` · ${i.assignee}` : ''}
+                </div>
               </td>
-              <td className="small">{i.priority}</td>
-              <td className="small">{i.assignee ?? ''}</td>
+              <td className="small col-prio" style={{ width: '7rem' }}>{i.priority}</td>
+              <td className="small col-assignee" style={{ width: '8rem' }}>{i.assignee ?? ''}</td>
             </tr>
           ))}
         </tbody>

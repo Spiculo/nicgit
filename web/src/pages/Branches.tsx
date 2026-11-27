@@ -51,8 +51,14 @@ export function Branches() {
 
   return (
     <main className="page stack">
-      <h1>{t('branches.title')}</h1>
-      <p className="muted">{t('branches.hint')}</p>
+      <header className="page-head">
+        <h1>{t('branches.title')}</h1>
+        {ctx.can('member') && (
+          <a className="btn btn-primary" href="#new-branch">
+            {t('branches.create')}
+          </a>
+        )}
+      </header>
       {list.isLoading && <Loading />}
       <ErrorNote error={list.error} />
       {error && <p className="error" role="alert">{error}</p>}
@@ -63,8 +69,8 @@ export function Branches() {
             <tr>
               <th>{t('branches.name')}</th>
               <th>{t('branches.head')}</th>
-              <th>{t('branches.author')}</th>
-              <th>{t('branches.updated')}</th>
+              <th className="col-author">{t('branches.author')}</th>
+              <th className="col-updated">{t('branches.updated')}</th>
               <th />
             </tr>
           </thead>
@@ -79,13 +85,17 @@ export function Branches() {
                     {o.protected && <span className="tag">{t('branches.protected')}</span>}
                     {o.is_agent && <span className="tag">agent</span>}
                   </div>
+                  <div className="small muted show-sm">
+                    {o.author}
+                    {o.time ? `, ${when(o.time, lang)}` : ''}
+                  </div>
                 </td>
                 <td>
                   <code>{shortId(o.head)}</code>
                   {o.message && <div className="small muted">{o.message}</div>}
                 </td>
-                <td className="small">{o.author ?? ''}</td>
-                <td className="small">{when(o.time, lang)}</td>
+                <td className="small col-author">{o.author ?? ''}</td>
+                <td className="small col-updated">{when(o.time, lang)}</td>
                 <td className="num">
                   {!o.is_default && ctx.can('admin') && (
                     <button className="btn btn-small" onClick={() => makeDefault(o)} disabled={setDefault.isPending}>
@@ -105,7 +115,7 @@ export function Branches() {
       )}
 
       {ctx.can('member') && (
-        <form className="form-block stack" onSubmit={submit}>
+        <form id="new-branch" className="form-block stack" style={{ maxWidth: '34rem' }} onSubmit={submit}>
           <h2>{t('branches.create')}</h2>
           <label>
             {t('branches.name')}

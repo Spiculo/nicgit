@@ -9,7 +9,7 @@ NicGit never talks to an AI provider directly. Every AI request goes to **the AI
 | `NICGIT_AI_ROUTER_URL` | Base URL, e.g. `https://ai.nicbim.example`. Unset: AI is unavailable on this server. |
 | `NICGIT_AI_ROUTER_KEY` | Sent as `Authorization: Bearer <key>`. One key per NicGit installation. |
 
-AI is **off by default for every account**. An account admin turns it on (`PUT /api/accounts/{slug}/ai {"enabled": true}` or Account > AI). Nothing leaves NicGit for an account that has not turned AI on.
+AI is **off by default for every account**. An account admin turns it on (`PUT /api/accounts/{slug}/ai {"enabled": true}` or Settings > AI). Nothing leaves NicGit for an account that has not turned AI on.
 
 ## Request
 

@@ -5,6 +5,7 @@ import { useT } from '../i18n'
 import { ApiError, useMe } from '../lib/api'
 import { OwnerSelect } from './NewProject'
 import { JobWait } from '../components/States'
+import { Info } from '../components/Info'
 
 export function ImportProject() {
   const t = useT()
@@ -44,7 +45,6 @@ export function ImportProject() {
   return (
     <main className="page page-narrow">
       <h1>{t('import.title')}</h1>
-      <p className="muted">{t('import.hint')}</p>
       <form onSubmit={submit}>
         <div className="field">
           <label htmlFor="owner">{t('project.owner')}</label>
@@ -55,7 +55,10 @@ export function ImportProject() {
           <input id="slug" value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} required />
         </div>
         <div className="field">
-          <label htmlFor="file">{t('import.file')}</label>
+          <div className="label-row">
+            <label htmlFor="file">{t('import.file')}</label>
+            <Info text={t('import.hint')} />
+          </div>
           <input
             id="file"
             type="file"
@@ -64,7 +67,7 @@ export function ImportProject() {
             onChange={(e) => {
               const f = e.target.files?.[0] ?? null
               setFile(f)
-              if (f && !slug) setSlug(f.name.replace(/\.(kim|ifc)$/i, '').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+/, ''))
+              if (f && !slug) setSlug(f.name.replace(/\.(nic|ifc)$/i, '').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+/, ''))
             }}
           />
         </div>

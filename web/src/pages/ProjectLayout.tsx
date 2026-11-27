@@ -1,24 +1,33 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { createContext, useContext, useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { Link, Route, Routes, useLocation, useParams } from 'react-router-dom'
+import { createContext, useContext } from 'react'
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { useT } from '../i18n'
 import type { Key } from '../i18n/en'
 import { projectApi, useApi } from '../lib/api'
 import type { Overview as OverviewData, Role } from '../lib/types'
 import { ErrorNote, Loading, NotFound } from '../components/States'
+import { Icon, type IconName } from '../components/Icon'
 import { Overview } from './Overview'
 import { Versions } from './Versions'
 import { Compare } from './Compare'
 import { Files } from './Files'
 import { Activity } from './Activity'
-import { ProjectSettings } from './ProjectSettings'
+import {
+  ProjectSettings,
+  SettingsGeneral,
+  SettingsPeople,
+  SettingsRules,
+  SettingsWebhooks,
+  SettingsAudit,
+  SettingsDanger,
+} from './ProjectSettings'
 import { Proposals, NewProposal, ProposalDetail } from './Proposals'
 import { Issues, NewIssue, IssueDetail } from './Issues'
 import { Milestones } from './Milestones'
 import { Branches } from './Branches'
 import { Preview } from './Preview'
-import { CIPage, RendersPage, SheetsPage, PackagesPage, AgentsPage } from './Soon'
+import { RendersPage, SheetsPage, PackagesPage, AgentsPage } from './Soon'
+import { Ci } from './Ci'
 
 export interface ProjectCtx {
   owner: string
@@ -40,21 +49,20 @@ export function useProject(): ProjectCtx {
 
 const ORDER: Role[] = ['viewer', 'reviewer', 'member', 'lead', 'admin']
 
-function Crumbs({ owner, slug }: { owner: string; slug: string }) {
-  const [el, setEl] = useState<HTMLElement | null>(null)
-  useEffect(() => setEl(document.getElementById('crumbs')), [])
-  if (!el) return null
-  return createPortal(
-    <>
-      <Link to="/">{owner}</Link>
-      <span className="sep">/</span>
-      <Link to={`/${owner}/${slug}`}>{slug}</Link>
-    </>,
-    el,
-  )
-}
-
 type Tab = 'code' | 'pulls' | 'issues' | 'preview' | 'ci' | 'renders' | 'sheets' | 'packages' | 'agents' | 'configs'
+
+const TAB_ICON: Record<Tab, IconName> = {
+  code: 'code',
+  pulls: 'pull',
+  issues: 'issue',
+  preview: 'eye',
+  ci: 'play',
+  renders: 'image',
+  sheets: 'file',
+  packages: 'package',
+  agents: 'bot',
+  configs: 'gear',
+}
 
 const CODE_PATHS = ['', 'files', 'versions', 'branches', 'compare', 'milestones', 'activity']
 
@@ -85,50 +93,13 @@ const CODE_SUB = [
 ] as const
 
 const CONFIG_SIDE = [
-  { anchor: 'general', key: 'config.general' },
-  { anchor: 'members', key: 'config.people' },
-  { anchor: 'rules', key: 'config.rules' },
-  { anchor: 'ai', key: 'config.ai' },
-  { anchor: 'budgets', key: 'config.budgets' },
-  { anchor: 'webhooks', key: 'config.webhooks' },
-  { anchor: 'audit', key: 'config.audit' },
-  { anchor: 'danger', key: 'config.danger' },
-] as const
-
-const SIDES: Partial<Record<Tab, readonly { anchor: string; key: string }[]>> = {
-  preview: [
-    { anchor: 'diff', key: 'preview.current' },
-    { anchor: 'plan', key: 'preview.next' },
-    { anchor: 'files', key: 'preview.files' },
-  ],
-  ci: [
-    { anchor: 'runs', key: 'ci.runs' },
-    { anchor: 'checks', key: 'ci.checks' },
-    { anchor: 'schedules', key: 'ci.schedules' },
-    { anchor: 'budgets', key: 'ci.budgets' },
-  ],
-  renders: [
-    { anchor: 'jobs', key: 'renders.jobs' },
-    { anchor: 'presets', key: 'renders.presets' },
-    { anchor: 'usage', key: 'renders.usage' },
-  ],
-  sheets: [
-    { anchor: 'list', key: 'sheets.list' },
-    { anchor: 'pdf', key: 'sheets.pdf' },
-    { anchor: 'revisions', key: 'sheets.revisions' },
-  ],
-  packages: [
-    { anchor: 'objects', key: 'packages.objects' },
-    { anchor: 'libraries', key: 'packages.libraries' },
-    { anchor: 'rules', key: 'packages.rules' },
-  ],
-  agents: [
-    { anchor: 'sessions', key: 'agents.sessions' },
-    { anchor: 'tools', key: 'agents.tools' },
-    { anchor: 'approvals', key: 'agents.approvals' },
-  ],
-  configs: CONFIG_SIDE,
-}
+  { to: 'general', key: 'config.general', icon: 'gear' },
+  { to: 'people', key: 'config.people', icon: 'user' },
+  { to: 'rules', key: 'config.rules', icon: 'shield' },
+  { to: 'webhooks', key: 'config.webhooks', icon: 'bell' },
+  { to: 'audit', key: 'config.audit', icon: 'book' },
+  { to: 'danger', key: 'config.danger', icon: 'trash' },
+] as const satisfies readonly { to: string; key: Key; icon: IconName }[]
 
 export function ProjectLayout() {
   const t = useT()
@@ -151,7 +122,7 @@ export function ProjectLayout() {
     role,
     can: (need) => ORDER.indexOf(role) >= ORDER.indexOf(need),
   }
-  const side = SIDES[active]
+  const showSide = active === 'configs' && ctx.can('admin')
   const tabs: { id: Tab; path: string; key: string; count?: number; admin?: boolean }[] = [
     { id: 'code', path: '', key: 'nav.code' },
     { id: 'pulls', path: '/proposals', key: 'nav.pulls', count: overview.data.open_proposals },
@@ -168,36 +139,64 @@ export function ProjectLayout() {
     const p = rest.replace(/\/+$/, '') || '/'
     return path === '' ? p === '/' : p === path || p.startsWith(`${path}/`)
   }
+  const project = overview.data.project
   return (
     <Ctx.Provider value={ctx}>
-      <Crumbs owner={owner} slug={slug} />
       <div className="project">
-        <nav className="repo-tabs" aria-label={overview.data.project.full_name}>
-          {tabs
-            .filter((tab) => !tab.admin || ctx.can('admin'))
-            .map((tab) => (
-              <Link key={tab.id} to={`${base}${tab.path}`} className={active === tab.id ? 'active' : ''}>
-                <span>{t(tab.key as Key)}</span>
-                {!!tab.count && <span className="count">{tab.count}</span>}
+        <header className="repo-head">
+          <div className="repo-head-inner">
+            <div className="repo-title">
+              <Icon name="book" />
+              {project.owner_kind === 'org' ? (
+                <Link to={`/${owner}`} className="owner">
+                  {owner}
+                </Link>
+              ) : (
+                <span className="owner">{owner}</span>
+              )}
+              <span className="sep">/</span>
+              <Link to={base} className="repo-name">
+                {slug}
               </Link>
-            ))}
-        </nav>
+              <span className="tag">{project.visibility === 'public' ? t('dash.public') : t('dash.private')}</span>
+            </div>
+            <nav className="repo-tabs" aria-label={project.full_name}>
+              {tabs
+                .filter((tab) => !tab.admin || ctx.can('admin'))
+                .map((tab) => (
+                  <Link key={tab.id} to={`${base}${tab.path}`} className={active === tab.id ? 'active' : undefined}>
+                    <Icon name={TAB_ICON[tab.id]} />
+                    <span>{t(tab.key as Key)}</span>
+                    {!!tab.count && <span className="count">{tab.count}</span>}
+                  </Link>
+                ))}
+            </nav>
+          </div>
+        </header>
         {active === 'code' && (
           <nav className="repo-subnav" aria-label={t('nav.code')}>
-            {CODE_SUB.map((item) => (
-              <Link key={item.path} to={`${base}${item.path}`} className={subActive(item.path) ? 'active' : ''}>
-                {t(item.key as Key)}
-              </Link>
-            ))}
+            <div className="repo-subnav-inner">
+              {CODE_SUB.map((item) => (
+                <Link key={item.path} to={`${base}${item.path}`} className={subActive(item.path) ? 'active' : undefined}>
+                  {t(item.key as Key)}
+                </Link>
+              ))}
+            </div>
           </nav>
         )}
-        <div className={`repo-body${side ? ' with-side' : ''}`}>
-          {side && (
+        <div className={`repo-body${showSide ? ' with-side' : ''}`}>
+          {showSide && (
             <aside className="repo-side" aria-label={t('nav.sections')}>
-              {side.map((item) => (
-                <a key={item.anchor} href={`#${item.anchor}`}>
-                  {t(item.key as Key)}
-                </a>
+              {CONFIG_SIDE.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={`${base}/settings/${item.to}`}
+                  end
+                  className={({ isActive }) => (isActive ? 'active' : undefined)}
+                >
+                  <Icon name={item.icon} />
+                  <span>{t(item.key)}</span>
+                </NavLink>
               ))}
             </aside>
           )}
@@ -217,12 +216,20 @@ export function ProjectLayout() {
               <Route path="files" element={<Files />} />
               <Route path="activity" element={<Activity />} />
               <Route path="preview" element={<Preview />} />
-              <Route path="ci" element={<CIPage />} />
+              <Route path="ci" element={<Ci />} />
               <Route path="renders" element={<RendersPage />} />
               <Route path="sheets" element={<SheetsPage />} />
               <Route path="packages" element={<PackagesPage />} />
               <Route path="agents" element={<AgentsPage />} />
-              <Route path="settings" element={<ProjectSettings />} />
+              <Route path="settings" element={<ProjectSettings />}>
+                <Route index element={<Navigate to="general" replace />} />
+                <Route path="general" element={<SettingsGeneral />} />
+                <Route path="people" element={<SettingsPeople />} />
+                <Route path="rules" element={<SettingsRules />} />
+                <Route path="webhooks" element={<SettingsWebhooks />} />
+                <Route path="audit" element={<SettingsAudit />} />
+                <Route path="danger" element={<SettingsDanger />} />
+              </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
           </div>

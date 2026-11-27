@@ -20,13 +20,15 @@ export function Login() {
   const code = params.get('error')
   const key = code && Object.hasOwn(ERRORS, code) ? ERRORS[code as keyof typeof ERRORS] : code ? ERRORS.server : null
   return (
-    <main className="page page-narrow">
-      <h1>{t('auth.signIn')}</h1>
-      {key && <p className="error" role="alert">{t(key)}</p>}
-      {/* A full page load: the server sends the browser on to Google. */}
-      <a className="btn btn-primary" style={{ textDecoration: 'none' }} href="/api/auth/google/start">
-        {t('auth.google')}
-      </a>
+    <main className="page page-narrow auth-page">
+      <div className="auth-card">
+        <h1>{t('auth.signIn')}</h1>
+        {key && <p className="error" role="alert">{t(key)}</p>}
+        {/* A full page load: the server sends the browser on to Google. */}
+        <a className="btn btn-primary" style={{ textDecoration: 'none', width: '100%', justifyContent: 'center' }} href="/api/auth/google/start">
+          {t('auth.google')}
+        </a>
+      </div>
     </main>
   )
 }

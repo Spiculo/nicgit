@@ -9,10 +9,12 @@ The forge for NicBim projects: a git server and a web app where architects, cons
 - **Branches** (design options) with create, delete, protected options and a default branch that a clone checks out.
 - **Issues** as BCF topics (import and export `.bcfzip`), **releases** from milestones and tags with sign-off and a source archive, `.nic`/`.ifc` **import** and `.nic` **export**.
 - **Accounts, organisations and teams**: public or private projects, five roles, org members, teams and team project grants.
+- **Two wording styles**: GitHub conventions (repository, pull request, issue) or architectural conventions (project, proposal, task), each in English and Spanish.
+- **First-run welcome** for new accounts: language, wording, field, experience, site experience, focus, company and team size.
 - **Actions** (the engine's schema, IDS, clash and model checks) and **AI** summaries through the AI router, both metered and capped by budgets.
-- Private by default; a project you cannot read does not exist for you (404 everywhere).
+- Private by default, with public as an explicit exception for coursework, examples and demos; a project you cannot read does not exist for you (404 everywhere).
 
-Design: [docs/superpowers/specs/2026-11-03-nicgit-design.md](docs/superpowers/specs/2026-11-03-nicgit-design.md). Decisions: [docs/decisions.md](docs/decisions.md). Next: [docs/future-work.md](docs/future-work.md). Specs: [files-first diff viewer](docs/specs/2026-11-25-files-first-diff-viewer.md), [GPU render service](docs/specs/2026-11-25-gpu-render-service.md), [repository navigation](docs/specs/2026-11-25-repository-navigation.md). AI router contract: [docs/ai-router.md](docs/ai-router.md). Changes: [CHANGELOG.md](CHANGELOG.md).
+Design: [docs/superpowers/specs/2026-11-03-nicgit-design.md](docs/superpowers/specs/2026-11-03-nicgit-design.md). Decisions: [docs/decisions.md](docs/decisions.md). Next: [docs/future-work.md](docs/future-work.md). Specs: [files-first diff viewer](docs/specs/2026-11-25-files-first-diff-viewer.md), [GPU render service](docs/specs/2026-11-25-gpu-render-service.md), [repository navigation](docs/specs/2026-11-25-repository-navigation.md). AI router contract: [docs/ai-router.md](docs/ai-router.md). Changes: [CHANGELOG.md](CHANGELOG.md). Gaps: [missing functionality](docs/missing-functionality.md).
 
 ## Deploy
 
