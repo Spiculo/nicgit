@@ -27,6 +27,15 @@ pub struct Project {
 pub const PROJECT_COLUMNS: &str = "p.id, p.owner_id, a.slug AS owner_slug, a.kind AS owner_kind, p.slug, p.description, \
      p.visibility, p.default_option, p.created_at";
 
+/// SQL predicate for the projects a user can read, with `$1` the user id. The query must join
+/// `projects p` and `accounts a`. It covers the owner account, organisation membership, a direct
+/// project grant and a team grant; a project the caller cannot read is absent, never partially shown.
+pub const ACCESSIBLE_PROJECTS: &str = "((a.kind = 'user' AND p.owner_id = $1) \
+     OR p.owner_id IN (SELECT org_id FROM org_members WHERE user_id = $1) \
+     OR p.id IN (SELECT project_id FROM project_members WHERE user_id = $1) \
+     OR p.id IN (SELECT tpa.project_id FROM team_project_access tpa JOIN team_members tm ON tm.team_id = tpa.team_id WHERE tm.user_id = $1))";
+
+
 impl Project {
     pub fn full_name(&self) -> String {
         format!("{}/{}", self.owner_slug, self.slug)

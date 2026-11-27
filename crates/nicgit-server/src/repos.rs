@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Project repositories on disk: `<data>/repos/<project id>/.git`, a bare Git directory named `.git` so the
-//! KimBim engine opens the folder as a project unchanged (ledger ruling, Task 1).
+//! NicBim engine opens the folder as a project unchanged (ledger ruling, Task 1).
 use crate::config::Config;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;

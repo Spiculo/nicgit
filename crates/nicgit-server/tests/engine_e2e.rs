@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! End to end with the real KimBim engine worker (NICGIT_TEST_ENGINE=1).
+//! End to end with the real NicBim engine worker (NICGIT_TEST_ENGINE=1).
 mod common;
 use common::engine;
 use serde_json::Value;
@@ -25,9 +25,9 @@ async fn kim_import_becomes_a_browsable_project() {
     }
     let app = common::TestApp::spawn().await;
     let alice = app.user("alice").await;
-    // A .kim of the M5 project, packed by the engine itself.
+    // A .nic of the M5 project, packed by the engine itself.
     let tmp = tempfile::tempdir().unwrap();
-    let kim = tmp.path().join("m5.kim");
+    let kim = tmp.path().join("m5.nic");
     let script = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/engine-python.sh");
     let fx = engine::m5_fixture();
     let code = format!(
@@ -40,7 +40,7 @@ async fn kim_import_becomes_a_browsable_project() {
         .await
         .unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-    let part = reqwest::multipart::Part::bytes(std::fs::read(&kim).unwrap()).file_name("m5.kim");
+    let part = reqwest::multipart::Part::bytes(std::fs::read(&kim).unwrap()).file_name("m5.nic");
     let form = reqwest::multipart::Form::new().text("owner", "alice").text("slug", "m5").part("file", part);
     let r = alice.post(app.url("/api/projects/import")).multipart(form).send().await.unwrap();
     assert_eq!(r.status(), 200, "{}", r.text().await.unwrap());

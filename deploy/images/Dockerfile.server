@@ -2,7 +2,7 @@
 # NicGit server image: the Rust server, the built web app and git.
 # Release builds: scripts/build-images.sh (this repository as committed, the engine at the commit in engine.rev).
 # By hand, from this repository with an engine checkout as a named context:
-#   docker buildx build -f deploy/images/Dockerfile.server --build-context kimcad=../kimcad -t nicgit-server .
+#   docker buildx build -f deploy/images/Dockerfile.server --build-context nicbim=../nicbim -t nicgit-server .
 FROM node:22-bookworm-slim AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
@@ -12,8 +12,8 @@ RUN npm run build
 
 FROM rust:1-bookworm AS server
 WORKDIR /src/nicgit
-COPY --from=kimcad crates /src/kimcad/crates
-COPY --from=kimcad Cargo.toml /src/kimcad/Cargo.toml
+COPY --from=nicbim crates /src/nicbim/crates
+COPY --from=nicbim Cargo.toml /src/nicbim/Cargo.toml
 COPY Cargo.toml Cargo.lock* ./
 COPY crates ./crates
 # The engine commit, compiled in and reported at /api/instance so clients can tell which record format this speaks.

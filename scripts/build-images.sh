@@ -5,10 +5,10 @@
 # `git archive`, so nothing uncommitted and nothing of the local checkouts' state gets in (decision N40).
 #   ./scripts/build-images.sh                     load into the local Docker as nicgit-server:<version>, ...
 #   NICGIT_IMAGE_PREFIX=registry.example/nicgit PUSH=1 ./scripts/build-images.sh   push instead
-# Needs Docker with buildx, and a kimcad checkout (KIMBIM_HOME, default ../kimcad) that has the pinned commit.
+# Needs Docker with buildx, and a nicbim checkout (NICBIM_HOME, default ../nicbim) that has the pinned commit.
 set -e
 here="$(cd "$(dirname "$0")/.." && pwd)"
-kim="${KIMBIM_HOME:-$here/../kimcad}"
+kim="${NICBIM_HOME:-${KIMBIM_HOME:-$here/../nicbim}}"
 prefix="${NICGIT_IMAGE_PREFIX:-nicgit}"
 # Docker on Windows needs Windows paths, not Git Bash ones.
 native() { case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) cygpath -w "$1" ;; *) printf '%s\n' "$1" ;; esac; }
@@ -16,7 +16,7 @@ native() { case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) cygpath -w "$1" ;; *) pri
 rev="$(grep -E '^[0-9a-f]{40}$' "$here/engine.rev" | head -1)"
 [ -n "$rev" ] || { echo "engine.rev has no commit"; exit 1; }
 git -C "$kim" cat-file -e "$rev^{commit}" 2>/dev/null \
-  || { echo "the kimcad checkout at $kim does not have $rev: fetch it there first"; exit 1; }
+  || { echo "the nicbim checkout at $kim does not have $rev: fetch it there first"; exit 1; }
 version="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$here/Cargo.toml" | head -1)"
 [ -n "$version" ] || { echo "no version in Cargo.toml"; exit 1; }
 if [ -n "$(git -C "$here" status --porcelain --untracked-files=no)" ]; then
@@ -27,14 +27,14 @@ fi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT INT TERM
 "$here/scripts/snapshot.sh" "$here" HEAD "$work/nicgit"
-"$here/scripts/snapshot.sh" "$kim" "$rev" "$work/kimcad"
+"$here/scripts/snapshot.sh" "$kim" "$rev" "$work/nicbim"
 
 if [ "${PUSH:-0}" = 1 ]; then output=--push; else output=--load; fi
 for image in server worker; do
   echo "== $prefix-$image:$version (engine $rev)"
   docker buildx build "$output" \
     -f "$(native "$work/nicgit/deploy/images/Dockerfile.$image")" \
-    --build-context kimcad="$(native "$work/kimcad")" \
+    --build-context nicbim="$(native "$work/nicbim")" \
     --build-arg NICGIT_VERSION="$version" --build-arg NICGIT_ENGINE_REV="$rev" \
     -t "$prefix-$image:$version" "$(native "$work/nicgit")"
 done

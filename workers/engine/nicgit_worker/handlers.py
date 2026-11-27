@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Job handlers: each turns (project repository, arguments) into a JSON result using the KimBim engine.
+"""Job handlers: each turns (project repository, arguments) into a JSON result using the NicBim engine.
 
 The repository is NicGit's bare store, `<repo>/.git`, which `kimbim.project.Project.open` reads as a
 project. Jobs that need a current option (merge preview, combine) use a throw-away worktree HEAD
@@ -160,8 +160,8 @@ class _OnOption:
 
     def __enter__(self) -> Project:
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="nicgit-wt-"))
-        (self.tmp / ".kimbim").mkdir()
-        (self.tmp / ".kimbim" / "HEAD").write_text(f"ref: refs/heads/{self.option}\n", encoding="utf-8")
+        (self.tmp / ".nicbim").mkdir()
+        (self.tmp / ".nicbim" / "HEAD").write_text(f"ref: refs/heads/{self.option}\n", encoding="utf-8")
         project = Project.open_worktree(self.repo, self.tmp)
         if project.repo.head() is None:
             raise JobError(f"design option {self.option!r} does not exist")

@@ -1,11 +1,11 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # End to end on a throw-away database and data folder: server on :3100, one engine worker, scripts/e2e.py.
-# Needs the dev Postgres (deploy/compose.dev.yaml) and kimcad's M5 fixture (`pixi run m5` in kimcad).
+# Needs the dev Postgres (deploy/compose.dev.yaml) and nicbim's M5 fixture (`pixi run m5` in nicbim).
 set -e
 here="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$here"
-kim="${KIMBIM_HOME:-$here/../kimcad}"
+kim="${NICBIM_HOME:-${KIMBIM_HOME:-$here/../nicbim}}"
 db="nicgit_e2e_$$"
 data="$(mktemp -d)"
 docker compose -f deploy/compose.dev.yaml up -d --wait >/dev/null

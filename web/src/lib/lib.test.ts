@@ -2,6 +2,8 @@
 import { describe, expect, test } from 'vitest'
 import { en } from '../i18n/en'
 import { es } from '../i18n/es'
+import { translate } from '../i18n'
+import { STYLE_TERMS } from '../i18n/styles'
 import { changeColor, CHANGE_COLORS } from '../viewer/colors'
 import { optionLabel, optionPath, shortId, plural } from './format'
 
@@ -13,6 +15,22 @@ describe('i18n', () => {
     const holes = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(',')
     for (const k of Object.keys(en) as (keyof typeof en)[]) {
       expect(holes(es[k]), k).toBe(holes(en[k]))
+    }
+  })
+  test('architectural wording overlays the Git base', () => {
+    expect(translate('en', 'git', 'nav.pulls')).toBe('Pull requests')
+    expect(translate('en', 'architecture', 'nav.pulls')).toBe('Proposals')
+    expect(translate('es', 'git', 'nav.issues')).toBe('Incidencias')
+    expect(translate('es', 'architecture', 'nav.issues')).toBe('Tareas')
+    expect(translate('en', 'architecture', 'nav.code')).toBe('Project')
+    expect(translate('en', 'git', 'nav.code')).toBe('Code')
+  })
+  test('style overlays keep the same placeholders', () => {
+    const holes = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(',')
+    for (const lang of ['en', 'es'] as const) {
+      for (const [k, v] of Object.entries(STYLE_TERMS.architecture[lang])) {
+        expect(holes(v), `${lang}:${k}`).toBe(holes(en[k as keyof typeof en]))
+      }
     }
   })
 })

@@ -26,7 +26,7 @@ log = logging.getLogger("nicgit_worker")
 
 CHILD = [sys.executable, "-m", "nicgit_worker.child"]
 JOB_TIMEOUT_SECONDS = float(os.environ.get("NICGIT_JOB_TIMEOUT_MINUTES", "60")) * 60
-KINDS = ["checks", "combine", "compare", "element_history", "export_ifc", "export_kim", "import_ifc", "import_kim",
+KINDS = ["checks", "combine", "compare", "element_history", "export_ifc", "export_nic", "import_ifc", "import_nic",
          "merge_preview", "settings_diff", "summary"]
 
 

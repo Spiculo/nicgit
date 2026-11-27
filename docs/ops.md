@@ -5,11 +5,11 @@
 | Piece | What it does | Size it by |
 |---|---|---|
 | `server` (Rust) | web app, API, git push/pull, permissions, metering | small: CPU mostly git packing during clones |
-| `worker` (Python, KimBim engine) | diffs, merges, IFC export, imports, checks | **this is where memory and CPU go.** Each worker runs one job at a time and holds one model in memory |
+| `worker` (Python, NicBim engine) | diffs, merges, IFC export, imports, checks | **this is where memory and CPU go.** Each worker runs one job at a time and holds one model in memory |
 | `db` (Postgres 16) | accounts, projects, proposals, issues, jobs, usage | small |
-| `data` volume | `repos/` (bare git repositories), `cache/` (IFC exports, .kim exports), `uploads/` | grows with history; back it up. The server is the only thing that mounts it |
+| `data` volume | `repos/` (bare git repositories), `cache/` (IFC exports, .nic exports), `uploads/` | grows with history; back it up. The server is the only thing that mounts it |
 
-**Worker sizing.** A worker's memory follows the largest model it opens. A few thousand elements needs well under 1 GB, while a 100k-element model being decomposed or exported needs several GB. Start with `NICGIT_WORKERS=2` and `NICGIT_WORKER_MEMORY=4g`. For big models, add workers or memory rather than server CPU. Moving the engine's hot paths into Rust (in kimcad) is the lever that brings this down (docs/future-work.md).
+**Worker sizing.** A worker's memory follows the largest model it opens. A few thousand elements needs well under 1 GB, while a 100k-element model being decomposed or exported needs several GB. Start with `NICGIT_WORKERS=2` and `NICGIT_WORKER_MEMORY=4g`. For big models, add workers or memory rather than server CPU. Moving the engine's hot paths into Rust (in nicbim) is the lever that brings this down (docs/future-work.md).
 
 ## Deploy with compose
 
@@ -20,7 +20,7 @@ cp deploy/self-hosted.env.example deploy/nicgit.env   # or deploy/hosted.env.exa
 docker compose -f deploy/compose.yaml --env-file deploy/nicgit.env up -d
 ```
 
-`deploy/compose.yaml` runs released images (`NICGIT_VERSION`, `NICGIT_IMAGE_PREFIX`). To build them from this working tree and a kimcad checkout instead, add `-f deploy/compose.build.yaml` and `--build`. Put a TLS-terminating proxy (Caddy, nginx, Traefik) in front of port 3000 and set `NICGIT_PUBLIC_URL` to the `https://` address so session cookies are marked secure.
+`deploy/compose.yaml` runs released images (`NICGIT_VERSION`, `NICGIT_IMAGE_PREFIX`). To build them from this working tree and a nicbim checkout instead, add `-f deploy/compose.build.yaml` and `--build`. Put a TLS-terminating proxy (Caddy, nginx, Traefik) in front of port 3000 and set `NICGIT_PUBLIC_URL` to the `https://` address so session cookies are marked secure.
 
 **Sign-in.** Create an OAuth client in Google Cloud Console (type "Web application") that allows `<NICGIT_PUBLIC_URL>/api/auth/google/callback`, and set `NICGIT_GOOGLE_CLIENT_ID` and `NICGIT_GOOGLE_CLIENT_SECRET`. Google is the only sign-in, on premises too, so the server and its users must be able to reach Google (decision N28). Who may create an account depends on the deployment (`NICGIT_SIGNUP`, decision N39). Git and NicBim use personal access tokens.
 
@@ -44,7 +44,7 @@ The Google account whose verified email equals `NICGIT_SITE_ADMIN_EMAIL` is the 
 | `NICGIT_GOOGLE_CLIENT_ID`, `NICGIT_GOOGLE_CLIENT_SECRET` | unset | without them nobody can sign in |
 | `NICGIT_SITE_ADMIN_EMAIL` | unset | |
 | `NICGIT_MAX_FILE_MB` | 512 | one upload, or one file in a push |
-| `NICGIT_MAX_REPO_MB` | 2048 | one project's repository; also what its cached exports may take, and what a .kim may unpack to |
+| `NICGIT_MAX_REPO_MB` | 2048 | one project's repository; also what its cached exports may take, and what a .nic may unpack to |
 | `NICGIT_MAX_ACCOUNT_MB` | 5120 | all of an account's repositories and waiting uploads |
 | `NICGIT_MAX_PROJECTS` | 100 | per account |
 | `NICGIT_MAX_ORGS` | 3 | organisations one person may administer |
@@ -77,7 +77,7 @@ Cached exports do not count against the account: they can be remade, so a projec
 
 ### What separates customers in the workers
 
-Engine workers parse untrusted IFC and .kim files, so assume one can be taken over by a crafted model. In compose (decision N30):
+Engine workers parse untrusted IFC and .nic files, so assume one can be taken over by a crafted model. In compose (decision N30):
 
 - A worker has no data volume, no database access (a separate network) and no internet, a read-only disk, no capabilities and a memory limit. It reaches only the server's internal address.
 - Its supervisor holds the pool token, which can only claim jobs. Each job runs in a new process that gets only its own job's token, which reaches only that project's files and dies when the job ends or is handed out again.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! NicGit server: accounts, projects, git hosting and the forge API around KimBim projects.
+//! NicGit server: accounts, projects, git hosting and the forge API around NicBim projects.
 pub mod access;
 pub mod actions;
 pub mod activity;

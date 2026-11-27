@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Engine handlers against a copy of KimBim's M5 project (two design options, combined once)."""
+"""Engine handlers against a copy of NicBim's M5 project (two design options, combined once)."""
 import json
 import pathlib
 import shutil
@@ -7,11 +7,11 @@ import subprocess
 
 import pytest
 
-from kimbim.kimfile import remove_tree
+from kimbim.nicfile import remove_tree
 from kimbim.project import Project
 from nicgit_worker import handlers
 
-FIXTURE = pathlib.Path(__file__).resolve().parents[3] / ".." / "kimcad" / "build" / "m5" / "project"
+FIXTURE = pathlib.Path(__file__).resolve().parents[3] / ".." / "nicbim" / "build" / "m5" / "project"
 
 
 def git(repo, *args):
@@ -21,7 +21,7 @@ def git(repo, *args):
 @pytest.fixture
 def repo(tmp_path):
     if not (FIXTURE / ".git").is_dir():
-        pytest.skip("run `pixi run m5` in kimcad first")
+        pytest.skip("run `pixi run m5` in nicbim first")
     dst = tmp_path / "repo"
     dst.mkdir()
     # A bare copy the way NicGit stores it: <dir>/.git

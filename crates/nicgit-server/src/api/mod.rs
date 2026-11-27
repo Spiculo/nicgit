@@ -5,7 +5,9 @@ use axum::Router;
 
 pub mod accounts;
 pub mod auth;
+pub mod ci;
 pub mod google;
+pub mod home;
 pub mod inbox;
 pub mod internal;
 pub mod issues;
@@ -32,6 +34,7 @@ pub fn router(max_file_mb: u64) -> Router<AppState> {
         .merge(orgs::router())
         .merge(projects::router())
         .merge(versions::router())
+        .merge(ci::router())
         .merge(jobs::router())
         .merge(views::router())
         .merge(proposals::router())
@@ -40,5 +43,6 @@ pub fn router(max_file_mb: u64) -> Router<AppState> {
         .merge(milestones::router())
         .merge(transfer::router(max_file_mb))
         .merge(inbox::router())
+        .merge(home::router())
         .merge(accounts::router())
 }

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Whole-project transfer: importing .kim and .ifc files into a NicGit store, and exporting .kim files.
+"""Whole-project transfer: importing .nic and .ifc files into a NicGit store, and exporting .nic files.
 
-A .kim is a transport format here (decision N3): its history is fetched into the store, and the file
+A .nic is a transport format here (decision N3): its history is fetched into the store, and the file
 itself is never kept. Uploads are untrusted: names are confined to the uploads folder, the zip's total
-uncompressed size is bounded before anything is written, and kimfile.unpack refuses unsafe paths.
+uncompressed size is bounded before anything is written, and project_file.unpack refuses unsafe paths.
 """
 from __future__ import annotations
 
@@ -14,12 +14,14 @@ import subprocess
 import tempfile
 import zipfile
 
-from kimbim import kimfile
+from . import project_file
 from kimbim.project import KimbimError, Project
 
 from .handlers import Context, JobError
 
-# A .kim compresses records well, but beyond this ratio it is treated as a zip bomb.
+ProjectFileError = project_file.ProjectFileError
+
+# A .nic compresses records well, but beyond this ratio it is treated as a zip bomb.
 MAX_RATIO = 20
 
 
@@ -44,49 +46,49 @@ def _branches(git_dir: pathlib.Path) -> list[str]:
     return [b for b in out.splitlines() if b]
 
 
-def import_kim(repo: pathlib.Path, args: dict, ctx: Context) -> dict:
-    kim = _upload(ctx, args["upload"])
+def import_nic(repo: pathlib.Path, args: dict, ctx: Context) -> dict:
+    nic = _upload(ctx, args["upload"])
     try:
         try:
-            with zipfile.ZipFile(kim) as z:
+            with zipfile.ZipFile(nic) as z:
                 total = sum(i.file_size for i in z.infolist())
-                legacy = kimfile.MANIFEST not in z.namelist() and "kimcad-file.json" in z.namelist()
+                legacy = project_file.MANIFEST not in z.namelist() and "nicbim-file.json" in z.namelist()
         except (zipfile.BadZipFile, OSError):
-            raise JobError("this is not a KimBim .kim file, or it is damaged") from None
+            raise JobError("this is not a NicBim .nic file, or it is damaged") from None
         if legacy:
-            raise JobError("this .kim was made by an older version of the app (KimCad, before the rename) and its records "
+            raise JobError("this .nic was made by an older version of the app (KimCad, before the rename) and its records "
                            "use the old format; open it in the current NicBim, save it, and upload it again")
-        limit = min(int(args.get("max_bytes", 1 << 34)), MAX_RATIO * max(kim.stat().st_size, 1))
+        limit = min(int(args.get("max_bytes", 1 << 34)), MAX_RATIO * max(nic.stat().st_size, 1))
         if total > limit:
-            raise JobError(f"the .kim unpacks to {total >> 20} MB, which is too large to import")
-        tmp = pathlib.Path(tempfile.mkdtemp(prefix="nicgit-kim-"))
+            raise JobError(f"the .nic unpacks to {total >> 20} MB, which is too large to import")
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="nicgit-nic-"))
         try:
             try:
-                kimfile.unpack(kim, tmp / "p")
-            except kimfile.KimError as e:
+                project_file.unpack(nic, tmp / "p")
+            except ProjectFileError as e:
                 raise JobError(str(e)) from None
             src = tmp / "p" / ".git"
             # Zip files drop empty folders; git needs these to recognise the repository.
             for d in ("objects", "refs/heads", "refs/tags"):
                 (src / d).mkdir(parents=True, exist_ok=True)
             if not (src / "HEAD").is_file():
-                raise JobError("this .kim holds no project history")
+                raise JobError("this .nic holds no project history")
             ctx.progress(0.3)
             dst = repo / ".git"
             _git(dst, "fetch", "--no-tags", str(src), "+refs/heads/*:refs/heads/*")
             _git(dst, "fetch", "--no-tags", str(src), "+refs/tags/*:refs/tags/*")
             ctx.progress(0.9)
         finally:
-            kimfile.remove_tree(tmp)
+            project_file.remove_tree(tmp)
         options = _branches(repo / ".git")
         if not options:
-            raise JobError("this .kim holds no design options")
+            raise JobError("this .nic holds no design options")
         default = "main" if "main" in options else options[0]
         (repo / ".git" / "HEAD").write_text(f"ref: refs/heads/{default}\n", encoding="utf-8")
         heads = {b: _git(repo / ".git", "rev-parse", f"refs/heads/{b}") for b in options}
         return {"options": options, "default": default, "heads": heads}
     finally:
-        kim.unlink(missing_ok=True)
+        nic.unlink(missing_ok=True)
 
 
 def import_ifc(repo: pathlib.Path, args: dict, ctx: Context) -> dict:
@@ -97,8 +99,8 @@ def import_ifc(repo: pathlib.Path, args: dict, ctx: Context) -> dict:
     try:
         tmp = pathlib.Path(tempfile.mkdtemp(prefix="nicgit-ifc-"))
         try:
-            (tmp / ".kimbim").mkdir()
-            (tmp / ".kimbim" / "HEAD").write_text(f"ref: refs/heads/{option}\n", encoding="utf-8")
+            (tmp / ".nicbim").mkdir()
+            (tmp / ".nicbim" / "HEAD").write_text(f"ref: refs/heads/{option}\n", encoding="utf-8")
             project = Project.open_worktree(repo, tmp)
             name, email = args.get("author") or ["NicGit", "nicgit@localhost"]
             try:
@@ -122,7 +124,7 @@ def import_ifc(repo: pathlib.Path, args: dict, ctx: Context) -> dict:
 
 def _loosen_refs(git_dir: pathlib.Path) -> None:
     """Write every ref as its own file and drop packed-refs: a zip keeps no empty folders, and a
-    repository without refs/ is not recognised once the .kim is unpacked (by NicBim or by git)."""
+    repository without refs/ is not recognised once the .nic is unpacked (by NicBim or by git)."""
     refs = _git(git_dir, "for-each-ref", "--format=%(objectname) %(refname)")
     for line in refs.splitlines():
         oid, name = line.split(" ", 1)
@@ -132,8 +134,8 @@ def _loosen_refs(git_dir: pathlib.Path) -> None:
     (git_dir / "packed-refs").unlink(missing_ok=True)
 
 
-def export_kim(repo: pathlib.Path, args: dict, ctx: Context) -> dict:
-    """A .kim of the project: `full` history, or `latest` (one version of one option, no history)."""
+def export_nic(repo: pathlib.Path, args: dict, ctx: Context) -> dict:
+    """A .nic of the project: `full` history, or `latest` (one version of one option, no history)."""
     scope = args.get("scope", "full")
     name = "".join(c for c in args.get("name", "project") if c.isalnum() or c in "-_.") or "project"
     out_dir = ctx.cache_dir / "exports"
@@ -166,18 +168,18 @@ def export_kim(repo: pathlib.Path, args: dict, ctx: Context) -> dict:
             raise JobError("scope is full or latest")
         _loosen_refs(dst)
         ctx.progress(0.6)
-        target = out_dir / f"{name}-{scope}-{os.getpid()}-{abs(hash(str(tmp))) % 10**8}.kim"
+        target = out_dir / f"{name}-{scope}-{os.getpid()}-{abs(hash(str(tmp))) % 10**8}.nic"
         try:
-            kimfile.pack(folder, target)
-        except kimfile.KimError as e:
+            project_file.pack(folder, target)
+        except ProjectFileError as e:
             raise JobError(str(e)) from None
-        return {"path": str(target), "bytes": target.stat().st_size, "name": f"{name}.kim"}
+        return {"path": str(target), "bytes": target.stat().st_size, "name": f"{name}.nic"}
     finally:
-        kimfile.remove_tree(tmp)
+        project_file.remove_tree(tmp)
 
 
 HANDLERS = {
-    "import_kim": import_kim,
+    "import_nic": import_nic,
     "import_ifc": import_ifc,
-    "export_kim": export_kim,
+    "export_nic": export_nic,
 }

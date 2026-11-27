@@ -88,7 +88,7 @@ def test_two_commit_fetch(server, tmp_path):
 
 
 def test_no_fetch_is_an_empty_repository(server, tmp_path):
-    repo, _ = prepared(job("import_kim", {"mode": "none"}, upload="u.kim"), _with_upload(server, b"zip"), tmp_path)
+    repo, _ = prepared(job("import_kim", {"mode": "none"}, upload="u.nic"), _with_upload(server, b"zip"), tmp_path)
     assert git(tmp_path, f"--git-dir={repo / '.git'}", "for-each-ref") == ""
 
 
@@ -212,7 +212,7 @@ def test_import_kim_pushes_options_and_milestones(server, tmp_path):
     empty = tmp_path / "empty.git"
     git(tmp_path, "init", "-q", "--bare", str(empty))
     c = _with_upload(empty, b"zip")
-    j = job("import_kim", {"mode": "none"}, upload="u.kim")
+    j = job("import_kim", {"mode": "none"}, upload="u.nic")
     repo, ctx = prepared(j, c, tmp_path)
     g = f"--git-dir={repo / '.git'}"
     git(tmp_path, g, "fetch", "-q", str(server), "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*")

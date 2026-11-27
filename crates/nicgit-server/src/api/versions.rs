@@ -3,18 +3,21 @@
 use crate::{
     access::{self, Project},
     app::AppState,
-    auth::MaybeUser,
+    auth::{CurrentUser, MaybeUser},
     error::{ApiResult, AppError},
     gitread::{valid_path, Git, Version},
     jobs,
 };
 use axum::{
+    body::Body,
     extract::{Path, Query, State},
     http::header,
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{delete, get, post},
     Json, Router,
 };
+use std::process::Stdio;
+use tokio_util::io::ReaderStream;
 use nicgit_core::roles::Role;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -25,9 +28,12 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route(&format!("{base}/overview"), get(overview))
         .route(&format!("{base}/options"), get(options))
+        .route(&format!("{base}/branches"), post(create_branch))
+        .route(&format!("{base}/branches/{{name}}"), delete(delete_branch))
         .route(&format!("{base}/versions"), get(versions))
         .route(&format!("{base}/versions/{{rev}}"), get(version))
         .route(&format!("{base}/tags"), get(tags))
+        .route(&format!("{base}/archive"), get(archive))
         .route(&format!("{base}/files"), get(files))
         .route(&format!("{base}/blob"), get(blob))
 }
@@ -91,6 +97,61 @@ async fn options(State(state): State<AppState>, user: MaybeUser, Path((owner, sl
 }
 
 #[derive(Deserialize)]
+struct NewBranch {
+    name: String,
+    from: Option<String>,
+}
+
+/// Create a design option (a branch) at `from` (the default option when absent).
+async fn create_branch(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path((owner, slug)): Path<(String, String)>,
+    Json(b): Json<NewBranch>,
+) -> ApiResult<Json<Value>> {
+    let (p, _) = access::load(&state, &owner, &slug, Some(user.id), Role::Member).await?;
+    let display = b.name.trim();
+    if display.is_empty() || display.len() > 100 {
+        return Err(AppError::bad_request("give the option a name"));
+    }
+    // The desktop app stores spaces percent-encoded in git refs ("Scheme%20B"); keep that convention.
+    let name = display.replace(' ', "%20");
+    let check = tokio::process::Command::new(&state.cfg.git).args(["check-ref-format", "--branch", &name]).status().await?;
+    if !check.success() || name.starts_with("agent/") {
+        return Err(AppError::bad_request("that is not a valid option name"));
+    }
+    let git = Git::new(&p.repo_dir(&state));
+    let from = b.from.filter(|f| !f.is_empty()).unwrap_or_else(|| p.default_option.clone());
+    let commit = git.resolve(&from).await.map_err(|_| AppError::bad_request("the starting option does not exist"))?;
+    crate::git::run(&state.cfg.git, &p.repo_dir(&state).join(".git"), &["branch", &name, &commit])
+        .await
+        .map_err(|e| AppError::bad_request(e.to_string()))?;
+    crate::audit::record(&state.db, Some(p.owner_id), Some(user.id), "option.create", &p.full_name(), json!({"option": name, "from": from})).await?;
+    Ok(Json(json!({"name": name, "label": display, "head": commit})))
+}
+
+/// Delete a design option. The default option and protected options cannot be deleted.
+async fn delete_branch(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path((owner, slug, name)): Path<(String, String, String)>,
+) -> ApiResult<Json<Value>> {
+    let (p, role) = access::load(&state, &owner, &slug, Some(user.id), Role::Member).await?;
+    if name == p.default_option {
+        return Err(AppError::bad_request("the default option cannot be deleted"));
+    }
+    let protected = crate::rules::protected_options(&state.db, p.id).await?;
+    if protected.contains(&name) && role < Role::Lead {
+        return Err(AppError::forbidden("this option is protected; a lead must change it"));
+    }
+    crate::git::run(&state.cfg.git, &p.repo_dir(&state).join(".git"), &["branch", "-D", &name])
+        .await
+        .map_err(|e| AppError::bad_request(e.to_string()))?;
+    crate::audit::record(&state.db, Some(p.owner_id), Some(user.id), "option.delete", &p.full_name(), json!({"option": name})).await?;
+    Ok(Json(json!({"ok": true})))
+}
+
+#[derive(Deserialize)]
 struct VersionsQuery {
     option: Option<String>,
     before: Option<String>,
@@ -150,6 +211,42 @@ async fn version(
     out["settings"] = json_file(&git, &commit, "settings.json").await?.unwrap_or(Value::Null);
     out["checks"] = json_file(&git, &commit, "checks.json").await?.unwrap_or(Value::Null);
     Ok(Json(out))
+}
+
+#[derive(Deserialize)]
+struct ArchiveQuery {
+    rev: Option<String>,
+}
+
+/// A source archive of any version, tag or option: `git archive` as a zip (GitHub's "Download ZIP").
+async fn archive(
+    State(state): State<AppState>,
+    user: MaybeUser,
+    Path((owner, slug)): Path<(String, String)>,
+    Query(q): Query<ArchiveQuery>,
+) -> ApiResult<Response> {
+    let (p, _, git) = load(&state, &user, &owner, &slug).await?;
+    let rev = q.rev.filter(|r| !r.is_empty()).unwrap_or_else(|| p.default_option.clone());
+    let commit = git.resolve(&rev).await.map_err(|_| AppError::not_found())?;
+    let mut cmd = tokio::process::Command::new(&state.cfg.git);
+    cmd.arg("--git-dir")
+        .arg(p.repo_dir(&state).join(".git"))
+        .args(["archive", "--format=zip", &format!("--prefix={}/", p.slug), &commit])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    let mut child = cmd.spawn().map_err(AppError::internal)?;
+    let stdout = child.stdout.take().expect("piped");
+    tokio::spawn(async move {
+        let _ = child.wait().await;
+    });
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/zip".to_string()),
+            (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}-{}.zip\"", p.slug, rev)),
+        ],
+        Body::from_stream(ReaderStream::new(stdout)),
+    )
+        .into_response())
 }
 
 async fn tags(State(state): State<AppState>, user: MaybeUser, Path((owner, slug)): Path<(String, String)>) -> ApiResult<Json<Value>> {

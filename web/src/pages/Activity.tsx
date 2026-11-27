@@ -29,17 +29,31 @@ export function Activity() {
         return <Link to={`${ctx.base}/proposals/${a.data.number}`}>{t('activity.proposal', { n: String(a.data.number) })}</Link>
       case 'proposal.combined':
         return <Link to={`${ctx.base}/proposals/${a.data.number}`}>{t('activity.combined', { n: String(a.data.number) })}</Link>
+      case 'proposal.reviewed':
+        return <Link to={`${ctx.base}/proposals/${a.data.number}`}>{t('activity.reviewed', { n: String(a.data.number) })}</Link>
+      case 'proposal.closed':
+        return <Link to={`${ctx.base}/proposals/${a.data.number}`}>{t('activity.closed', { n: String(a.data.number) })}</Link>
       case 'issue.opened':
         return <Link to={`${ctx.base}/issues/${a.data.number}`}>{t('activity.issue', { n: String(a.data.number) })}</Link>
+      case 'issues.imported':
+        return t('activity.issuesImported', { n: String(a.data.count ?? 0) })
+      case 'project.imported':
+        return t('activity.imported')
       case 'milestone.created':
         return t('activity.milestone', { tag: String(a.data.tag) })
+      case 'checks.finished':
+        return t('home.checksFinished', { result: a.data.passed ? t('run.passed') : t('run.failed') })
+      case 'actions.skipped':
+        return t('activity.checksSkipped')
       default:
         return a.kind
     }
   }
   return (
     <main className="page">
-      <h1>{t('activity.title')}</h1>
+      <header className="page-head">
+        <h1>{t('activity.title')}</h1>
+      </header>
       {feed.isLoading && <Loading />}
       <ErrorNote error={feed.error} />
       <ul className="list">

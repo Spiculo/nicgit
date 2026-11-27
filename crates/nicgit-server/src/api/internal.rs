@@ -42,7 +42,7 @@ impl RunningJob {
         match self.kind.as_str() {
             "combine" => exact(self.args["target"].as_str()?),
             "import_ifc" => exact(self.args["option"].as_str().unwrap_or("main")),
-            "import_kim" => Some(("create".to_string(), vec![])),
+            "import_nic" => Some(("create".to_string(), vec![])),
             _ => None,
         }
     }
@@ -186,7 +186,7 @@ async fn finish(State(state): State<AppState>, headers: HeaderMap, Path(id): Pat
     .await?;
     let (project, kind, args) = row.ok_or_else(AppError::not_found)?;
     // An upload is used once, whatever became of the import.
-    if matches!(kind.as_str(), "import_kim" | "import_ifc") {
+    if matches!(kind.as_str(), "import_nic" | "import_ifc") {
         if let Some(path) = args["upload"].as_str().and_then(|n| crate::repos::upload_path(&state.cfg, project, n)) {
             let _ = tokio::fs::remove_file(path).await;
         }

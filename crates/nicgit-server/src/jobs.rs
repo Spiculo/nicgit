@@ -78,7 +78,7 @@ pub fn fetch_plan(kind: &str, args: &Value) -> Value {
         "export_ifc" | "checks" => args["rev"].as_str().map(|r| (vec![r], 1)),
         "summary" => args["rev"].as_str().map(|r| (vec![r], 2)),
         "compare" | "settings_diff" => args["from"].as_str().zip(args["to"].as_str()).map(|(a, b)| (if a == b { vec![a] } else { vec![a, b] }, 1)),
-        "import_kim" => return json!({"mode": "none"}),
+        "import_nic" => return json!({"mode": "none"}),
         _ => None,
     };
     match wanted {

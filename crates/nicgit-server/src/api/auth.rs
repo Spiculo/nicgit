@@ -6,7 +6,8 @@ use crate::{
     error::{ApiResult, AppError},
 };
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
+    response::Redirect,
     routing::{delete, get, post},
     Json, Router,
 };
@@ -19,8 +20,10 @@ use uuid::Uuid;
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/api/dev/login", get(dev_login))
         .route("/api/auth/logout", post(logout))
         .route("/api/me", get(me).patch(update_me))
+        .route("/api/me/onboarding", post(onboarding))
         .route("/api/me/tokens", get(list_tokens).post(create_token))
         .route("/api/me/tokens/{id}", delete(delete_token))
 }
@@ -43,6 +46,26 @@ pub(crate) async fn start_session(state: &AppState, jar: CookieJar, user: Uuid) 
     Ok(jar.add(cookie))
 }
 
+#[derive(Deserialize)]
+struct DevLogin {
+    slug: Option<String>,
+}
+
+/// Local preview only: sign in as a dev account without Google. Enabled by NICGIT_DEV=1 and never
+/// reachable otherwise (the same switch `dev-user` uses).
+async fn dev_login(State(state): State<AppState>, jar: CookieJar, Query(q): Query<DevLogin>) -> ApiResult<(CookieJar, Redirect)> {
+    if std::env::var("NICGIT_DEV").ok().as_deref() != Some("1") {
+        return Err(AppError::not_found());
+    }
+    let slug = q.slug.unwrap_or_else(|| "ana".into());
+    if !nicgit_core::names::valid_slug(&slug) {
+        return Err(AppError::bad_request("not a valid user name"));
+    }
+    let id = crate::dev::create_user(&state.db, &slug, &format!("{slug}@example.com"), &slug).await?;
+    let jar = start_session(&state, jar, id).await?;
+    Ok((jar, Redirect::to("/")))
+}
+
 async fn logout(State(state): State<AppState>, jar: CookieJar) -> ApiResult<(CookieJar, Json<Value>)> {
     if let Some(c) = jar.get(SESSION_COOKIE) {
         sqlx::query("DELETE FROM sessions WHERE id = $1").bind(auth::sha256_hex(c.value())).execute(&state.db).await?;
@@ -51,8 +74,10 @@ async fn logout(State(state): State<AppState>, jar: CookieJar) -> ApiResult<(Coo
 }
 
 async fn me(State(state): State<AppState>, user: CurrentUser) -> ApiResult<Json<Value>> {
-    let (email, display_name, lang): (String, String, String) = sqlx::query_as(
-        "SELECT u.email, a.display_name, u.lang FROM users u JOIN accounts a ON a.id = u.account_id WHERE u.account_id = $1",
+    let r: MeRow = sqlx::query_as(
+        "SELECT u.email, a.display_name, u.lang, u.style, (u.onboarded_at IS NOT NULL) AS onboarded, \
+                u.work, u.years_experience, u.site_experience, u.focus, u.company, u.team_size, u.company_size \
+         FROM users u JOIN accounts a ON a.id = u.account_id WHERE u.account_id = $1",
     )
     .bind(user.id)
     .fetch_one(&state.db)
@@ -67,15 +92,123 @@ async fn me(State(state): State<AppState>, user: CurrentUser) -> ApiResult<Json<
     let orgs: Vec<Value> =
         orgs.into_iter().map(|(slug, name, role)| json!({"slug": slug, "display_name": name, "role": role})).collect();
     Ok(Json(json!({
-        "id": user.id, "slug": user.slug, "email": email, "display_name": display_name, "lang": lang,
+        "id": user.id, "slug": user.slug, "email": r.email, "display_name": r.display_name, "lang": r.lang,
+        "style": r.style, "onboarded": r.onboarded, "work": r.work, "years_experience": r.years_experience,
+        "site_experience": r.site_experience, "focus": r.focus, "company": r.company,
+        "team_size": r.team_size, "company_size": r.company_size,
         "is_site_admin": user.is_site_admin, "orgs": orgs,
     })))
+}
+
+#[derive(sqlx::FromRow)]
+struct MeRow {
+    email: String,
+    display_name: String,
+    lang: String,
+    style: String,
+    onboarded: bool,
+    work: String,
+    years_experience: Option<i32>,
+    site_experience: String,
+    focus: String,
+    company: String,
+    team_size: String,
+    company_size: String,
+}
+
+const WORK: [&str; 7] = ["architect", "engineer", "contractor", "manager", "client", "student", "other"];
+const SITE: [&str; 4] = ["none", "little", "regular", "extensive"];
+const FOCUS: [&str; 7] = ["residential", "commercial", "public", "infrastructure", "interiors", "education", "other"];
+const TEAM_SIZE: [&str; 5] = ["solo", "two_to_five", "six_to_twenty", "twenty_one_to_fifty", "fifty_plus"];
+const COMPANY_SIZE: [&str; 5] = ["one_to_ten", "eleven_to_fifty", "fifty_one_to_two_hundred", "two_hundred_one_to_thousand", "thousand_plus"];
+
+fn allowed(value: &str, accepted: &[&str], field: &str) -> ApiResult<()> {
+    if accepted.contains(&value) {
+        Ok(())
+    } else {
+        Err(AppError::bad_request(format!("choose a valid {field}")))
+    }
+}
+
+#[derive(Deserialize)]
+struct Onboarding {
+    lang: String,
+    style: String,
+    work: String,
+    years_experience: Option<i32>,
+    site_experience: String,
+    #[serde(default)]
+    focus: String,
+    #[serde(default)]
+    company: String,
+    #[serde(default)]
+    team_size: String,
+    #[serde(default)]
+    company_size: String,
+}
+
+/// The first-run answers. One transaction so the language, wording and profile change together.
+async fn onboarding(State(state): State<AppState>, user: CurrentUser, Json(b): Json<Onboarding>) -> ApiResult<Json<Value>> {
+    if !["en", "es"].contains(&b.lang.as_str()) {
+        return Err(AppError::bad_request("language must be en or es"));
+    }
+    if !["git", "architecture"].contains(&b.style.as_str()) {
+        return Err(AppError::bad_request("style must be git or architecture"));
+    }
+    allowed(b.work.trim(), &WORK, "field")?;
+    allowed(b.site_experience.trim(), &SITE, "site experience")?;
+    if !b.focus.trim().is_empty() {
+        allowed(b.focus.trim(), &FOCUS, "project focus")?;
+    }
+    if !b.team_size.trim().is_empty() {
+        allowed(b.team_size.trim(), &TEAM_SIZE, "team size")?;
+    }
+    if !b.company_size.trim().is_empty() {
+        allowed(b.company_size.trim(), &COMPANY_SIZE, "company size")?;
+    }
+    let years = b.years_experience.ok_or_else(|| AppError::bad_request("add your years in the field"))?;
+    if !(0..=80).contains(&years) {
+        return Err(AppError::bad_request("years in the field must be between 0 and 80"));
+    }
+    let company = b.company.trim();
+    if company.chars().count() > 120 {
+        return Err(AppError::bad_request("the company name is too long"));
+    }
+    let work = b.work.trim();
+    let site = b.site_experience.trim();
+    let focus = b.focus.trim();
+    let team_size = b.team_size.trim();
+    let company_size = b.company_size.trim();
+    sqlx::query(
+        "UPDATE users SET lang = $2, style = $3, work = $4, years_experience = $5, site_experience = $6, \
+                focus = $7, company = $8, team_size = $9, company_size = $10, onboarded_at = COALESCE(onboarded_at, now()) \
+         WHERE account_id = $1",
+    )
+    .bind(user.id)
+    .bind(&b.lang)
+    .bind(&b.style)
+    .bind(work)
+    .bind(years)
+    .bind(site)
+    .bind(focus)
+    .bind(company)
+    .bind(team_size)
+    .bind(company_size)
+    .execute(&state.db)
+    .await?;
+    audit::record(&state.db, Some(user.id), Some(user.id), "user.onboarding", &user.slug, json!({
+        "work": work, "years_experience": years, "site_experience": site, "focus": focus,
+        "team_size": team_size, "company_size": company_size,
+    }))
+    .await?;
+    Ok(Json(json!({"ok": true})))
 }
 
 #[derive(Deserialize)]
 struct MeUpdate {
     display_name: Option<String>,
     lang: Option<String>,
+    style: Option<String>,
     slug: Option<String>,
 }
 
@@ -126,6 +259,12 @@ async fn update_me(State(state): State<AppState>, user: CurrentUser, Json(b): Js
             return Err(AppError::bad_request("language must be en or es"));
         }
         sqlx::query("UPDATE users SET lang = $2 WHERE account_id = $1").bind(user.id).bind(lang).execute(&state.db).await?;
+    }
+    if let Some(style) = &b.style {
+        if !["git", "architecture"].contains(&style.as_str()) {
+            return Err(AppError::bad_request("style must be git or architecture"));
+        }
+        sqlx::query("UPDATE users SET style = $2 WHERE account_id = $1").bind(user.id).bind(style).execute(&state.db).await?;
     }
     if let Some(name) = &b.display_name {
         sqlx::query("UPDATE accounts SET display_name = $2 WHERE id = $1").bind(user.id).bind(name.trim()).execute(&state.db).await?;

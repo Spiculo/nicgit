@@ -4,11 +4,19 @@ import { Link } from 'react-router-dom'
 import { useLang, useT } from '../i18n'
 import type { Key } from '../i18n/en'
 import { api, ApiError, useAction, useApi } from '../lib/api'
-import { shortId, whenIso } from '../lib/format'
+import { shortId, when, whenIso } from '../lib/format'
 import { useProject } from './ProjectLayout'
 import { ErrorNote, Loading } from '../components/States'
 
 const PHASES = ['concept', 'schematic', 'design_development', 'permit', 'tender', 'construction', 'as_built'] as const
+
+interface Tag {
+  name: string
+  target: string
+  message: string
+  tagger: string
+  time: number
+}
 
 interface Milestone {
   id: string
@@ -29,6 +37,7 @@ export function Milestones() {
   const ctx = useProject()
   const key = ctx.api('/milestones')
   const list = useApi<Milestone[]>(key)
+  const tags = useApi<Tag[]>(ctx.api('/tags'))
   const [phase, setPhase] = useState<(typeof PHASES)[number]>('concept')
   const [tag, setTag] = useState('')
   const [rev, setRev] = useState(ctx.overview.project.default_option)
@@ -40,7 +49,9 @@ export function Milestones() {
   const ordered = [...(list.data ?? [])].sort((a, b) => PHASES.indexOf(a.phase) - PHASES.indexOf(b.phase))
   return (
     <main className="page stack">
-      <h1>{t('milestones.title')}</h1>
+      <header className="page-head">
+        <h1>{t('milestones.title')}</h1>
+      </header>
       {list.isLoading && <Loading />}
       <ErrorNote error={list.error} />
       {list.data?.length === 0 && <p className="empty">{t('milestones.empty')}</p>}
@@ -48,7 +59,7 @@ export function Milestones() {
         <table className="schedule">
           <thead>
             <tr>
-              <th>{t('milestones.phase')}</th>
+              <th className="col-phase">{t('milestones.phase')}</th>
               <th>{t('milestones.tag')}</th>
               <th>{t('milestones.version')}</th>
               <th />
@@ -57,9 +68,10 @@ export function Milestones() {
           <tbody>
             {ordered.map((m) => (
               <tr key={m.id}>
-                <td>{t(`phase.${m.phase}` as Key)}</td>
+                <td className="col-phase">{t(`phase.${m.phase}` as Key)}</td>
                 <td>
                   <strong>{m.title}</strong>
+                  <div className="small muted show-sm">{t(`phase.${m.phase}` as Key)}</div>
                   <div className="small muted">
                     {m.tag}. {m.created_by}, {whenIso(m.created_at, lang)}
                   </div>
@@ -70,6 +82,9 @@ export function Milestones() {
                   <div className="small">
                     <a href={ctx.api(`/versions/${m.commit}/model.ifc`)} download>
                       IFC
+                    </a>{' '}
+                    <a href={ctx.api(`/archive?rev=${encodeURIComponent(m.tag)}`)} download>
+                      {t('milestones.source')}
                     </a>{' '}
                     <Link to={`${ctx.base}?rev=${m.commit}`}>{t('rail.model')}</Link>
                   </div>
@@ -85,6 +100,43 @@ export function Milestones() {
                     )
                   )}
                 </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <h2>{t('milestones.tags')}</h2>
+      {tags.isLoading && <Loading />}
+      <ErrorNote error={tags.error} />
+      {tags.data?.length === 0 && <p className="empty">{t('milestones.tagsEmpty')}</p>}
+      {!!tags.data?.length && (
+        <table className="schedule">
+          <thead>
+            <tr>
+              <th>{t('milestones.tag')}</th>
+              <th>{t('milestones.version')}</th>
+              <th>{t('branches.author')}</th>
+              <th>{t('branches.updated')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tags.data.map((tag) => (
+              <tr key={tag.name}>
+                <td>
+                  <strong>{tag.name}</strong>
+                  {tag.message && <div className="small muted">{tag.message.split('\n')[0]}</div>}
+                </td>
+                <td>
+                  <code>{shortId(tag.target)}</code>
+                  <div className="small">
+                    <a href={ctx.api(`/versions/${tag.name}/model.ifc`)} download>IFC</a>{' '}
+                    <a href={ctx.api(`/archive?rev=${encodeURIComponent(tag.name)}`)} download>{t('milestones.source')}</a>{' '}
+                    <Link to={`${ctx.base}?rev=${tag.target}`}>{t('rail.model')}</Link>
+                  </div>
+                </td>
+                <td className="small">{tag.tagger}</td>
+                <td className="small">{when(tag.time, lang)}</td>
               </tr>
             ))}
           </tbody>

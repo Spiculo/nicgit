@@ -115,15 +115,15 @@ async fn milestone_creates_tag() {
 async fn import_upload_creates_project_and_job() {
     let app = common::TestApp::spawn().await;
     let alice = app.user("alice").await;
-    let part = reqwest::multipart::Part::bytes(b"PK\x05\x06fake".to_vec()).file_name("tower.kim");
+    let part = reqwest::multipart::Part::bytes(b"PK\x05\x06fake".to_vec()).file_name("tower.nic");
     let form = reqwest::multipart::Form::new().text("owner", "alice").text("slug", "tower").part("file", part);
     let r = alice.post(app.url("/api/projects/import")).multipart(form).send().await.unwrap();
     assert_eq!(r.status(), 200, "{}", r.text().await.unwrap());
     let v: Value = r.json().await.unwrap();
     assert_eq!(v["project"]["full_name"], "alice/tower");
     let job: Value = alice.get(app.url(&format!("/api/jobs/{}", v["job"].as_str().unwrap()))).send().await.unwrap().json().await.unwrap();
-    assert_eq!(job["kind"], "import_kim");
-    // Only .kim and .ifc are accepted, and size is limited.
+    assert_eq!(job["kind"], "import_nic");
+    // Only .nic and .ifc are accepted, and size is limited.
     let part = reqwest::multipart::Part::bytes(b"x".to_vec()).file_name("model.rvt");
     let form = reqwest::multipart::Form::new().text("owner", "alice").text("slug", "rvt").part("file", part);
     assert_eq!(alice.post(app.url("/api/projects/import")).multipart(form).send().await.unwrap().status(), 400);
@@ -136,10 +136,10 @@ async fn import_upload_creates_project_and_job() {
 }
 
 #[tokio::test]
-async fn export_kim_is_a_job() {
+async fn export_nic_is_a_job() {
     let (app, alice, _) = setup().await;
-    let r = alice.get(u(&app, "/export.kim?scope=latest")).send().await.unwrap();
+    let r = alice.get(u(&app, "/export.nic?scope=latest")).send().await.unwrap();
     assert_eq!(r.status(), 202);
-    let r = alice.get(u(&app, "/export.kim?scope=everything")).send().await.unwrap();
+    let r = alice.get(u(&app, "/export.nic?scope=everything")).send().await.unwrap();
     assert_eq!(r.status(), 400);
 }

@@ -244,8 +244,8 @@ async fn combine_whole_theirs_moves_target() {
     let code = "import pathlib, sys, tempfile\n\
         from kimbim.project import Project\n\
         work = pathlib.Path(tempfile.mkdtemp())\n\
-        (work / '.kimbim').mkdir()\n\
-        (work / '.kimbim' / 'HEAD').write_text('ref: refs/heads/main\\n')\n\
+        (work / '.nicbim').mkdir()\n\
+        (work / '.nicbim' / 'HEAD').write_text('ref: refs/heads/main\\n')\n\
         p = Project.open_worktree(pathlib.Path(sys.argv[1]), work)\n\
         preview = p.merge_preview('Scheme%20B')\n\
         picks = {c.to_dict()['id']: 'theirs' for c in preview.result.conflicts}\n\

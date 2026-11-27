@@ -27,7 +27,7 @@ pub async fn on_job_finished(
     error: Option<&str>,
 ) -> ApiResult<()> {
     let (Some(result), None) = (result, error) else { return Ok(()) };
-    if !matches!(kind, "import_kim" | "import_ifc" | "checks") {
+    if !matches!(kind, "import_nic" | "import_ifc" | "checks") {
         return Ok(());
     }
     let p: Project = sqlx::query_as(&format!(
@@ -45,7 +45,7 @@ pub async fn on_job_finished(
     let refs = crate::git::refs(&state.cfg.git, &crate::repos::git_dir(&state.cfg, project)).await.map_err(crate::error::AppError::internal)?;
     let exists = |option: &str| refs.contains_key(&format!("refs/heads/{option}"));
     let heads: Vec<String> = match kind {
-        "import_kim" => {
+        "import_nic" => {
             if let Some(default) = result["default"].as_str().filter(|d| exists(d)) {
                 crate::repos::set_head(&state.cfg, project, default).await.map_err(crate::error::AppError::internal)?;
                 sqlx::query("UPDATE projects SET default_option = $2 WHERE id = $1").bind(project).bind(default).execute(&state.db).await?;

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Importing and exporting whole projects: .kim files and IFC."""
+"""Importing and exporting whole projects: .nic files and IFC."""
 import pathlib
 import subprocess
 import zipfile
@@ -7,10 +7,10 @@ import zipfile
 import pytest
 
 from kimbim import kimfile
-from kimbim.kimfile import remove_tree
+from kimbim.nicfile import remove_tree
 from nicgit_worker import handlers
 
-KIMCAD = pathlib.Path(__file__).resolve().parents[3] / ".." / "kimcad"
+KIMCAD = pathlib.Path(__file__).resolve().parents[3] / ".." / "nicbim"
 M5 = KIMCAD / "build" / "m5" / "project"
 HOUSE = KIMCAD / "build" / "house.ifc"
 
@@ -38,11 +38,11 @@ def ctx(tmp_path, **kw):
 @pytest.fixture
 def m5_kim(tmp_path):
     if not (M5 / ".git").is_dir():
-        pytest.skip("run `pixi run m5` in kimcad first")
+        pytest.skip("run `pixi run m5` in nicbim first")
     folder = tmp_path / "m5-folder"
     subprocess.run(["git", "clone", "--bare", "-q", str(M5 / ".git"), str(folder / ".git")], check=True)
     (folder / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
-    kim = tmp_path / "uploads" / "m5.kim"
+    kim = tmp_path / "uploads" / "m5.nic"
     kim.parent.mkdir(exist_ok=True)
     kimfile.pack(folder, kim)
     remove_tree(folder)
@@ -60,7 +60,7 @@ def test_import_kim_keeps_history(m5_kim, tmp_path):
 
 
 def test_import_kim_rejects_bomb(tmp_path):
-    bomb = tmp_path / "uploads" / "bomb.kim"
+    bomb = tmp_path / "uploads" / "bomb.nic"
     bomb.parent.mkdir(exist_ok=True)
     with zipfile.ZipFile(bomb, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr(kimfile.MANIFEST, '{"format": "kim", "version": 1, "kind": "project"}')
@@ -71,11 +71,11 @@ def test_import_kim_rejects_bomb(tmp_path):
 
 
 def test_import_kim_rejects_non_kim(tmp_path):
-    junk = tmp_path / "uploads" / "junk.kim"
+    junk = tmp_path / "uploads" / "junk.nic"
     junk.parent.mkdir(exist_ok=True)
     junk.write_bytes(b"not a zip")
     repo = empty_repo(tmp_path / "repo")
-    with pytest.raises(handlers.JobError, match="KimBim"):
+    with pytest.raises(handlers.JobError, match="NicBim"):
         handlers.run("import_kim", repo, {"upload": junk.name, "max_bytes": 1 << 30}, ctx(tmp_path))
 
 
@@ -87,7 +87,7 @@ def test_upload_name_cannot_escape(tmp_path):
 
 def test_import_ifc_first_version(tmp_path):
     if not HOUSE.is_file():
-        pytest.skip("run `pixi run house` in kimcad first")
+        pytest.skip("run `pixi run house` in nicbim first")
     up = tmp_path / "uploads" / "house.ifc"
     up.parent.mkdir(exist_ok=True)
     up.write_bytes(HOUSE.read_bytes())
@@ -120,10 +120,10 @@ def test_export_kim_latest_has_one_commit(m5_kim, tmp_path):
 
 
 def test_import_kim_from_before_the_rename_explains(tmp_path):
-    old = tmp_path / "uploads" / "old.kim"
+    old = tmp_path / "uploads" / "old.nic"
     old.parent.mkdir(exist_ok=True)
     with zipfile.ZipFile(old, "w") as z:
-        z.writestr("kimcad-file.json", '{"format": "kim", "version": 1, "kind": "project"}')
+        z.writestr("nicbim-file.json", '{"format": "kim", "version": 1, "kind": "project"}')
         z.writestr(".git/HEAD", "ref: refs/heads/main\n")
     repo = empty_repo(tmp_path / "repo")
     with pytest.raises(handlers.JobError, match="older version"):

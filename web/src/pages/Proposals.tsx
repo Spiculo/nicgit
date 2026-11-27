@@ -81,14 +81,14 @@ export function Proposals() {
   const list = useApi<Proposal[]>(ctx.api(`/proposals?state=${state}`))
   return (
     <main className="page">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+      <header className="page-head">
         <h1>{t('proposals.title')}</h1>
         {ctx.can('member') && (
           <Link className="btn btn-primary" to={`${ctx.base}/proposals/new`}>
             {t('proposals.new')}
           </Link>
         )}
-      </div>
+      </header>
       <div className="tabs" role="tablist">
         {(['open', 'combined', 'closed'] as const).map((s) => (
           <button key={s} role="tab" aria-selected={state === s} onClick={() => setParams({ state: s })}>
@@ -378,29 +378,33 @@ export function ProposalDetail() {
     refresh()
   }
   return (
-    <div style={{ display: 'grid', gridTemplateRows: 'auto 1fr', height: '100%' }}>
-      <header style={{ padding: '1.25rem 1.5rem 0', background: 'var(--sheet)', borderBottom: '1px solid var(--grid)' }}>
-        <h1 style={{ marginBottom: '0.4rem' }}>
-          {p.title} <span className="muted">#{p.number}</span>
-        </h1>
-        <p className="row small">
-          <StateTag state={p.state} />
-          <span>{t('proposals.into', { source: optionLabel(p.source), target: optionLabel(p.target) })}</span>
-          <span className="muted">
-            {p.author}, {whenIso(p.created_at, lang)}
-          </span>
-        </p>
-        <div className="tabs" role="tablist" style={{ marginBottom: 0, borderBottom: 0 }}>
-          {(['overview', 'changes', 'conflicts'] as const).map((k) => (
-            <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
-              {k === 'overview' ? t('proposals.tabOverview') : k === 'changes' ? t('proposals.tabChanges') : t('proposals.tabConflicts')}
-            </button>
-          ))}
+    <div className="detail-page">
+      <header className="detail-head">
+        <div className="shell">
+          <h1 style={{ marginBottom: '0.4rem' }}>
+            {p.title} <span className="muted">#{p.number}</span>
+          </h1>
+          <p className="row small">
+            <StateTag state={p.state} />
+            <span>{t('proposals.into', { source: optionLabel(p.source), target: optionLabel(p.target) })}</span>
+            <span className="muted">
+              {p.author}, {whenIso(p.created_at, lang)}
+            </span>
+          </p>
+          <div className="tabs" role="tablist" style={{ marginBottom: 0, borderBottom: 0 }}>
+            {(['overview', 'changes', 'conflicts'] as const).map((k) => (
+              <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
+                {k === 'overview' ? t('proposals.tabOverview') : k === 'changes' ? t('proposals.tabChanges') : t('proposals.tabConflicts')}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
       {tab === 'changes' && <CompareView from={p.state === 'combined' ? `${p.merge_commit}^1` : p.target_head} to={p.source_head} protectedKeys={d.rule.protected_settings} />}
       {tab !== 'changes' && (
-        <main className="page stack" style={{ maxWidth: '60rem' }}>
+        <main className="detail-body">
+          <div className="shell">
+            <div className="stack detail-content">
           {tab === 'overview' && (
             <>
               {p.body && <p style={{ whiteSpace: 'pre-wrap' }}>{p.body}</p>}
@@ -483,6 +487,8 @@ export function ProposalDetail() {
           )}
           {tab === 'conflicts' && p.state === 'open' && <Combine d={d} onDone={refresh} />}
           {tab === 'conflicts' && p.state !== 'open' && <p className="muted">{t('proposals.combinedInto', { target: optionLabel(p.target) })}</p>}
+            </div>
+          </div>
         </main>
       )}
     </div>

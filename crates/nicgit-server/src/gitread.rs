@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Reading a project's history through the KimBim engine's own repository crate (`kimbim-repo`, gix), so
+//! Reading a project's history through the NicBim engine's own repository crate (`kimbim-repo`, gix), so
 //! the server sees exactly what the desktop app sees. Calls are blocking; they run on the blocking pool.
 use crate::error::{ApiResult, AppError};
 use kimbim_repo::{CommitInfo, Repo};
